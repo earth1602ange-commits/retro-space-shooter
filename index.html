@@ -8,7 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Retro Space Shooter EX - Ultimate Optimized Edition</title>
-    <!-- RETRO SPACE SHOOTER VERSION: v1.4.0 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.4.3 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -89,7 +89,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.4.0</div>
+        <div class="version-badge" aria-label="Game version">v1.4.3</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -1404,14 +1404,22 @@
     // ---------------------------------------------------------------
     // 05. Game flow / UI
     // ---------------------------------------------------------------
+    function normalizeShipType(shipType) {
+        // 新形式は 0〜3。旧データに 4 が残っている場合は TYPE-4 に補正。
+        const n = Number(shipType);
+        if (!Number.isFinite(n)) return 0;
+        const index = Math.floor(n);
+        if (index >= 0 && index <= 3) return index;
+        if (index === 4) return 3;
+        return 0;
+    }
+
     function getShipName(shipType) {
-        const index = Number(shipType);
-        return SHIP_NAMES[index] || 'UNKNOWN SHIP';
+        return SHIP_NAMES[normalizeShipType(shipType)] || SHIP_NAMES[0];
     }
 
     function getShipEmoji(shipType) {
-        const index = Number(shipType);
-        return SHIP_EMOJIS[index] || '🚀';
+        return SHIP_EMOJIS[normalizeShipType(shipType)] || SHIP_EMOJIS[0];
     }
 
     function cleanRankingName(name) {
@@ -1456,7 +1464,7 @@
             const ranking = rows.map(row => ({
                 name: cleanRankingName(row.player_name),
                 score: Number(row.score) || 0,
-                shipType: Number(row.ship_type) || 0,
+                shipType: normalizeShipType(row.ship_type),
                 date: row.created_at ? Date.parse(row.created_at) : Date.now()
             }));
 
@@ -1478,12 +1486,12 @@
     async function saveRanking(name, value, shipType) {
         const cleanName = cleanRankingName(name);
         const cleanScore = Math.max(0, Math.floor(Number(value) || 0));
-        const cleanShipType = Math.max(0, Math.min(3, Math.floor(Number(shipType) || 0)));
+        const cleanShipType = normalizeShipType(shipType);
 
         try {
-            // 同じ名前が既にあるか確認する。名前は「重複禁止」ではなく、
-            // 同じプレイヤーのベストスコアを更新するためのキーとして使う。
-            const lookupUrl = `${SUPABASE_SCORES_URL}?select=id,player_name,score,ship_type,created_at&player_name=ilike.${encodeURIComponent(cleanName)}&limit=1`;
+            // 同名候補をすべて取得。過去に重複登録されたデータがあっても、
+            // 一番高いスコアの行を「本人の記録」として扱う。
+            const lookupUrl = `${SUPABASE_SCORES_URL}?select=id,player_name,score,ship_type,created_at&player_name=ilike.${encodeURIComponent(cleanName)}&order=score.desc,created_at.asc&limit=20`;
             const lookupResponse = await fetch(lookupUrl, {
                 method: 'GET',
                 headers: {
@@ -1501,8 +1509,6 @@
             const existingRows = await lookupResponse.json();
             const existing = existingRows[0] || null;
 
-            // 既存プレイヤーなら、低いスコアでは更新せず、
-            // 高いスコアのときだけスコア・使用機体・日時を更新する。
             if (existing) {
                 const oldScore = Number(existing.score) || 0;
 
@@ -1568,9 +1574,8 @@
             console.error('Online score submission failed.', error);
             rankingOnline = false;
 
-            // Keep a local copy only for genuine network/API failures.
             const ranking = loadCachedRanking();
-            const localIndex = ranking.findIndex(row => String(row.name).toLowerCase() === cleanName.toLowerCase());
+            const localIndex = ranking.findIndex(row => String(row.name).trim().toLowerCase() === cleanName.toLowerCase());
             const localRow = {
                 name: cleanName,
                 score: cleanScore,
