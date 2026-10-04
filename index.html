@@ -258,7 +258,7 @@
         <div id="screen-ranking" class="absolute inset-0 flex flex-col items-center justify-center bg-black/92 p-5 text-center z-30 hidden">
             <div class="w-full max-w-sm bg-slate-950/95 border border-cyan-400/60 rounded-xl p-5 shadow-lg shadow-cyan-500/10">
                 <h2 class="text-2xl md:text-3xl text-cyan-300 mb-1 neon-text-blue tracking-widest">RANKING</h2>
-                <div class="text-[10px] text-slate-500 mb-4">LOCAL SCORE BOARD</div>
+                <div data-ranking-status class="text-[10px] text-slate-500 mb-4">ONLINE SCORE BOARD</div>
                 <div id="ranking-list" class="space-y-1.5 mb-5"></div>
                 <button id="btn-ranking-close" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-600 rounded-lg transition active:scale-95">
                     BACK TO TITLE
@@ -472,9 +472,18 @@
     let selectedShipType = 0;
     let score = 0;
     let highScore = Number(localStorage.getItem('retro_space_high_opt') || 0);
-    const RANKING_KEY = 'retro_space_ranking_v1';
+    // ===============================================================
+    // ONLINE RANKING / SUPABASE
+    // anon / publishable key is safe to use in a browser when RLS is configured.
+    // NEVER put a service_role / secret key here.
+    // ===============================================================
+    const SUPABASE_URL = 'https://uhyicuqrmmfzumtqjxem.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVoeWljdXFybW1menVtdHFqeGVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDM2MTQsImV4cCI6MjEwNjY3OTYxNH0.JdNkDDQZPDBiCWIPXuQQU6cmJATGaTZDy_5-nmhqjdo';
+    const SUPABASE_SCORES_URL = `${SUPABASE_URL}/rest/v1/scores`;
+    const RANKING_KEY = 'retro_space_ranking_v1'; // local fallback/cache only
     const RANKING_LIMIT = 10;
     let rankingSubmitted = false;
+    let rankingOnline = true;
     let nextUpgradeScore = 4000;
     let gameElapsedMs = 0;
     let lastFrameTime = performance.now();
@@ -1364,7 +1373,17 @@
     // ---------------------------------------------------------------
     // 05. Game flow / UI
     // ---------------------------------------------------------------
-    function loadRanking() {
+    function cleanRankingName(name) {
+        return String(name || 'PLAYER').trim().replace(/[<>]/g, '').slice(0, 10) || 'PLAYER';
+    }
+
+    function cacheRanking(ranking) {
+        try {
+            localStorage.setItem(RANKING_KEY, JSON.stringify(ranking.slice(0, RANKING_LIMIT)));
+        } catch {}
+    }
+
+    function loadCachedRanking() {
         try {
             const data = JSON.parse(localStorage.getItem(RANKING_KEY) || '[]');
             return Array.isArray(data) ? data.filter(row => row && Number.isFinite(Number(row.score))) : [];
@@ -1373,23 +1392,85 @@
         }
     }
 
-    function saveRanking(name, value) {
-        const cleanName = String(name || 'PLAYER').trim().replace(/[<>]/g, '').slice(0, 10) || 'PLAYER';
-        const entry = { name: cleanName, score: Number(value) || 0, date: Date.now() };
-        const ranking = loadRanking();
-        ranking.push(entry);
-        ranking.sort((a, b) => Number(b.score) - Number(a.score) || Number(a.date) - Number(b.date));
-        const top = ranking.slice(0, RANKING_LIMIT);
-        localStorage.setItem(RANKING_KEY, JSON.stringify(top));
-        return top;
+    async function loadRanking() {
+        try {
+            const response = await fetch(`${SUPABASE_SCORES_URL}?select=player_name,score,created_at&order=score.desc,created_at.asc&limit=${RANKING_LIMIT}`, {
+                method: 'GET',
+                headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+                },
+                cache: 'no-store'
+            });
+
+            if (!response.ok) {
+                throw new Error(`Supabase GET ${response.status}`);
+            }
+
+            const rows = await response.json();
+            const ranking = rows.map(row => ({
+                name: cleanRankingName(row.player_name),
+                score: Number(row.score) || 0,
+                date: row.created_at ? Date.parse(row.created_at) : Date.now()
+            }));
+
+            rankingOnline = true;
+            cacheRanking(ranking);
+            return ranking;
+        } catch (error) {
+            console.warn('Online ranking unavailable; using local cache.', error);
+            rankingOnline = false;
+            return loadCachedRanking();
+        }
     }
 
-    function renderRanking() {
-        const ranking = loadRanking();
+    async function saveRanking(name, value) {
+        const cleanName = cleanRankingName(name);
+        const cleanScore = Math.max(0, Math.floor(Number(value) || 0));
+
+        try {
+            const response = await fetch(SUPABASE_SCORES_URL, {
+                method: 'POST',
+                headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json',
+                    Prefer: 'return=representation'
+                },
+                body: JSON.stringify({
+                    player_name: cleanName,
+                    score: cleanScore
+                })
+            });
+
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(`Supabase POST ${response.status}: ${message}`);
+            }
+
+            rankingOnline = true;
+            return true;
+        } catch (error) {
+            console.error('Online score submission failed.', error);
+            rankingOnline = false;
+            // Keep a local copy so a temporary network problem does not erase the result.
+            const ranking = loadCachedRanking();
+            ranking.push({ name: cleanName, score: cleanScore, date: Date.now() });
+            ranking.sort((a, b) => Number(b.score) - Number(a.score) || Number(a.date) - Number(b.date));
+            cacheRanking(ranking);
+            return false;
+        }
+    }
+
+    async function renderRanking() {
+        ui.rankingList.innerHTML = '<div class="py-5 text-xs text-slate-500">ランキングを読み込み中...</div>';
+        const ranking = await loadRanking();
+
         if (ranking.length === 0) {
             ui.rankingList.innerHTML = '<div class="py-5 text-xs text-slate-500">まだランキングがありません</div>';
             return;
         }
+
         ui.rankingList.innerHTML = ranking.map((row, index) => {
             const rank = index + 1;
             const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : String(rank).padStart(2, '0');
@@ -1400,13 +1481,18 @@
                 <span class="text-right text-xs text-yellow-300 font-mono">${String(Number(row.score)).padStart(6, '0')}</span>
             </div>`;
         }).join('');
+
+        const subtitle = ui.ranking.querySelector('[data-ranking-status]');
+        if (subtitle) {
+            subtitle.innerText = rankingOnline ? 'ONLINE SCORE BOARD' : 'OFFLINE CACHE';
+        }
     }
 
-    function openRankingScreen() {
-        renderRanking();
+    async function openRankingScreen() {
         ui.title.classList.add('hidden');
         ui.gameover.classList.add('hidden');
         ui.ranking.classList.remove('hidden');
+        await renderRanking();
     }
 
     function closeRankingScreen() {
@@ -1414,16 +1500,19 @@
         ui.title.classList.remove('hidden');
     }
 
-    function submitCurrentScore() {
+    async function submitCurrentScore() {
         if (rankingSubmitted) return;
+
         const name = ui.rankingNameInput.value || 'PLAYER';
-        saveRanking(name, score);
-        rankingSubmitted = true;
         ui.submitRanking.disabled = true;
-        ui.submitRanking.innerText = 'REGISTERED ✓';
-        renderRanking();
+        ui.submitRanking.innerText = 'SENDING...';
+
+        const success = await saveRanking(name, score);
+        rankingSubmitted = true;
+        ui.submitRanking.innerText = success ? 'REGISTERED ✓' : 'SAVED LOCALLY';
         ui.gameover.classList.add('hidden');
         ui.ranking.classList.remove('hidden');
+        await renderRanking();
     }
 
     function defeatBoss() {
