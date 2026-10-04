@@ -8,7 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Retro Space Shooter EX - Ultimate Optimized Edition</title>
-    <!-- RETRO SPACE SHOOTER VERSION: v1.4.3 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.4.5 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -89,7 +89,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.4.3</div>
+        <div class="version-badge" aria-label="Game version">v1.4.5</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -1186,6 +1186,8 @@
             this.active = true;
             this.timer = 0;
             this.level = level;
+            this.isInvulnerable = true;
+            this.meteorSpawnCooldown = 150;
 
             this.parts = [
                 {
@@ -1199,7 +1201,7 @@
                     hp: 90 + level * 50,
                     active: true,
                     color: '#ff00aa',
-                    shootCooldown: 70
+                    shootCooldown: 38
                 },
                 {
                     id: 'aim',
@@ -1212,7 +1214,7 @@
                     hp: 60 + level * 35,
                     active: true,
                     color: '#00f0ff',
-                    shootCooldown: 40
+                    shootCooldown: 28
                 },
                 {
                     id: 'random',
@@ -1225,7 +1227,7 @@
                     hp: 60 + level * 35,
                     active: true,
                     color: '#ffcc00',
-                    shootCooldown: 26
+                    shootCooldown: 18
                 }
             ];
 
@@ -1238,13 +1240,39 @@
 
         update() {
             this.timer++;
-            
+
+            // 登場中は完全無敵。所定位置に着いた瞬間から攻撃可能になる。
             if (this.y < this.targetY) {
                 this.y += 1.5;
+                this.isInvulnerable = true;
                 return;
             }
 
+            this.isInvulnerable = false;
             this.x = GAME_WIDTH / 2 + Math.sin(this.timer * 0.03) * (GAME_WIDTH / 2 - 70);
+
+            // ボス戦中は一定間隔で隕石(type 2)を呼び出す。
+            this.meteorSpawnCooldown--;
+            if (this.meteorSpawnCooldown <= 0) {
+                this.meteorSpawnCooldown = Math.max(110, 150 - this.level * 8);
+
+                const count = 2 + Math.min(1, Math.floor(this.level / 2));
+                for (let i = 0; i < count; i++) {
+                    const meteor = new Enemy(2);
+                    const spread = (i - (count - 1) / 2) * 38;
+                    meteor.x = Math.max(0, Math.min(GAME_WIDTH - meteor.width, this.x + spread - meteor.width / 2));
+                    meteor.y = this.y + 48 + i * 8;
+                    meteor.speedY = 2.4 + this.level * 0.15 + Math.random() * 0.8;
+                    meteor.speedX = (Math.random() - 0.5) * 1.8;
+                    meteor.hp = Math.max(meteor.hp, 4 + this.level);
+                    meteor.maxHp = meteor.hp;
+                    enemies.push(meteor);
+                }
+
+                // 呼び出し演出
+                createExplosion(this.x, this.y + 34, '#a3a3a3', 8);
+                sfx.playExplosion(false);
+            }
 
             for (let i = 0; i < this.parts.length; i++) {
                 let part = this.parts[i];
@@ -1258,21 +1286,21 @@
                         const angle = Math.PI / 2 + (Math.random() - 0.5) * 0.2;
                         spawnFromPool(enemyBulletPool, b => b.spawn(
                             px, py + 15,
-                            Math.cos(angle) * 3,
-                            Math.sin(angle) * 3,
+                            Math.cos(angle) * 3.2,
+                            Math.sin(angle) * 3.2,
                             '#ff00aa', 7, true, 42
                         ));
                     } else if (part.id === 'aim') {
                         const angle = Math.atan2(player.y - py, player.x - px);
                         spawnFromPool(enemyBulletPool, b => b.spawn(
                             px, py + 10,
-                            Math.cos(angle) * 5,
-                            Math.sin(angle) * 5,
+                            Math.cos(angle) * 5.4,
+                            Math.sin(angle) * 5.4,
                             '#00f0ff', 3.5, false, 0
                         ));
                     } else if (part.id === 'random') {
                         const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.8;
-                        const speed = Math.random() * 2.5 + 2.8;
+                        const speed = Math.random() * 2.7 + 3.0;
                         spawnFromPool(enemyBulletPool, b => b.spawn(
                             px, py + 10,
                             Math.cos(angle) * speed,
@@ -1283,10 +1311,19 @@
                 }
             }
         }
-
         draw() {
             ctx.save();
             ctx.translate(this.x, this.y);
+
+            if (this.isInvulnerable) {
+                ctx.save();
+                ctx.strokeStyle = `rgba(255,255,255,${0.35 + Math.sin(this.timer * 0.3) * 0.2})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, 86 + Math.sin(this.timer * 0.18) * 5, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
 
             if (this.currentHp > 0) {
                 ctx.strokeStyle = '#475569';
@@ -1945,7 +1982,7 @@
             }
 
             // Player Bullets vs Boss Parts
-            if (bullet.active && boss && boss.active) {
+            if (bullet.active && boss && boss.active && !boss.isInvulnerable) {
                 for (let j = 0; j < boss.parts.length; j++) {
                     const part = boss.parts[j];
                     if (!part.active) continue;
@@ -2047,7 +2084,9 @@
         gameElapsedMs += deltaMs;
         if (!isBossActive && !boss) formationSpawnTimer += deltaMs;
 
-        if (score >= nextUpgradeScore) {
+        // ボス戦中（登場演出・戦闘中）はアップグレード画面を出さない。
+        // スコア条件を満たしていても nextUpgradeScore は進めず、ボス撃破後にまとめて判定する。
+        if (!isBossActive && !boss && score >= nextUpgradeScore) {
             while (nextUpgradeScore <= score) {
                 nextUpgradeScore += 4000;
             }
