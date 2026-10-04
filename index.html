@@ -8,7 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Retro Space Shooter EX - Ultimate Optimized Edition</title>
-    <!-- RETRO SPACE SHOOTER VERSION: v1.4.5 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.4.6 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -89,7 +89,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.4.5</div>
+        <div class="version-badge" aria-label="Game version">v1.4.6</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -164,7 +164,7 @@
                         <span class="text-sm">💥</span>
                     </div>
                     <div class="text-left text-slate-300 text-[9px] leading-relaxed">
-                        【広範囲拡散型】前方に強力な散弾をブチ込む。<br>接近戦で驚異的な瞬間火力を発揮する。
+                        【高密度散弾型】前方に大量の散弾を密集発射。<br>近距離で高い瞬間火力を叩き出す重装機。
                     </div>
                 </button>
 
@@ -907,15 +907,20 @@
                 }
             } 
             else if (this.shipType === 2) {
-                const numPellets = 4 + shotPowerLevel * 2;
-                const spreadAngle = 1.0;
-                
+                // TYPE-3 強化：散弾数アップ＋集弾率アップ
+                const pelletCountMap = [8, 10, 12, 14];
+                const numPellets = pelletCountMap[shotPowerLevel - 1] || 14;
+
+                // 拡散角を狭くして、前方により密集させる。
+                const spreadAngleMap = [0.72, 0.70, 0.68, 0.66];
+                const spreadAngle = spreadAngleMap[shotPowerLevel - 1] || 0.66;
+
                 for (let i = 0; i < numPellets; i++) {
                     const angle = -Math.PI / 2 + (i / (numPellets - 1) - 0.5) * spreadAngle;
-                    const speed = 9.5 + Math.random() * 2;
+                    const speed = 9.5 + Math.random() * 1.5;
                     const vx = Math.cos(angle) * speed;
                     const vy = Math.sin(angle) * speed;
-                    const lifeTime = 16 + Math.floor(Math.random() * 6);
+                    const lifeTime = 18 + Math.floor(Math.random() * 5);
                     fire(cx, this.y, vx, vy, '#f59e0b', 4, 'shotgun', lifeTime);
                 }
             } 
