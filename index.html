@@ -8,6 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Retro Space Shooter EX - Ultimate Optimized Edition</title>
+    <!-- RETRO SPACE SHOOTER VERSION: v1.4.0 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -42,6 +43,22 @@
             box-shadow: 0 0 20px rgba(0, 240, 255, 0.5), inset 0 0 15px rgba(0, 240, 255, 0.25);
             border: 2px solid #00f0ff;
         }
+        .version-badge {
+            position: absolute;
+            right: 10px;
+            bottom: 8px;
+            z-index: 40;
+            padding: 4px 7px;
+            border: 1px solid rgba(0, 240, 255, 0.22);
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.38);
+            color: rgba(148, 163, 184, 0.72);
+            font-size: 8px;
+            line-height: 1;
+            letter-spacing: 0.08em;
+            pointer-events: none;
+        }
+
         .crt-overlay {
             background: linear-gradient(
                 rgba(18, 16, 16, 0) 50%, 
@@ -72,6 +89,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
+        <div class="version-badge" aria-label="Game version">v1.4.0</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -458,6 +476,7 @@
 
     // HUD is visual UI, not gameplay state. Updating it every frame wastes layout/DOM time.
     let hudFrame = 0;
+    let renderFrame = 0;
     let lastHudScore = -1;
     let lastHudLives = -1;
     let lastHudStage = -1;
@@ -484,6 +503,9 @@
     const RANKING_LIMIT = 10;
     let rankingSubmitted = false;
     let rankingOnline = true;
+    let rankingCacheTime = 0;
+    let rankingCache = null;
+    const RANKING_CACHE_TTL = 10000;
     let nextUpgradeScore = 4000;
     let gameElapsedMs = 0;
     let lastFrameTime = performance.now();
@@ -964,10 +986,10 @@
                 ctx.fillRect(-16, 4, 32, 6);
             }
 
-            ctx.fillStyle = Math.random() > 0.5 ? '#ff9900' : '#ff0000';
+            ctx.fillStyle = (renderFrame >> 2) & 1 ? '#ff9900' : '#ff0000';
             ctx.beginPath();
             ctx.moveTo(-4, 12);
-            ctx.lineTo(0, 18 + Math.random() * 8);
+            ctx.lineTo(0, 18 + ((renderFrame >> 1) % 9));
             ctx.lineTo(4, 12);
             ctx.closePath();
             ctx.fill();
@@ -1392,7 +1414,11 @@
         }
     }
 
-    async function loadRanking() {
+    async function loadRanking(force = false) {
+        const now = Date.now();
+        if (!force && rankingCache && now - rankingCacheTime < RANKING_CACHE_TTL) {
+            return rankingCache;
+        }
         try {
             const response = await fetch(`${SUPABASE_SCORES_URL}?select=player_name,score,created_at&order=score.desc,created_at.asc&limit=${RANKING_LIMIT}`, {
                 method: 'GET',
@@ -1415,12 +1441,17 @@
             }));
 
             rankingOnline = true;
+            rankingCache = ranking;
+            rankingCacheTime = now;
             cacheRanking(ranking);
             return ranking;
         } catch (error) {
             console.warn('Online ranking unavailable; using local cache.', error);
             rankingOnline = false;
-            return loadCachedRanking();
+            const cached = loadCachedRanking();
+            rankingCache = cached;
+            rankingCacheTime = now;
+            return cached;
         }
     }
 
@@ -1449,6 +1480,8 @@
             }
 
             rankingOnline = true;
+            rankingCache = null;
+            rankingCacheTime = 0;
             return true;
         } catch (error) {
             console.error('Online score submission failed.', error);
@@ -1958,6 +1991,7 @@
     }
 
     function render() {
+        renderFrame++;
         ctx.fillStyle = '#020205';
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
@@ -1983,10 +2017,14 @@
     // ---------------------------------------------------------------
     // 07. Input / events / boot
     // ---------------------------------------------------------------
+    let rafId = 0;
     function gameLoop() {
-        update();
-        render();
-        requestAnimationFrame(gameLoop);
+        // Skip expensive canvas work while the tab is hidden.
+        if (!document.hidden) {
+            update();
+            render();
+        }
+        rafId = requestAnimationFrame(gameLoop);
     }
 
     window.addEventListener('keydown', e => {
@@ -2075,7 +2113,7 @@
 
     ui.high.innerText = String(highScore).padStart(6, '0');
 
-    requestAnimationFrame(gameLoop);
+    rafId = requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
