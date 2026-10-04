@@ -8,7 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Retro Space Shooter EX - Ultimate Optimized Edition</title>
-    <!-- RETRO SPACE SHOOTER VERSION: v1.4.6 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.4.7 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -89,7 +89,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.4.6</div>
+        <div class="version-badge" aria-label="Game version">v1.4.7</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -164,7 +164,7 @@
                         <span class="text-sm">💥</span>
                     </div>
                     <div class="text-left text-slate-300 text-[9px] leading-relaxed">
-                        【高密度散弾型】前方に大量の散弾を密集発射。<br>近距離で高い瞬間火力を叩き出す重装機。
+                        【高密度散弾型】大量の散弾を前方へ高密度発射。<br>長射程＋中央弾の強化クリティカルで大型敵にも強い重装機。
                     </div>
                 </button>
 
@@ -559,7 +559,7 @@
             this.hitSet = new Set();
         }
 
-        spawn(x, y, vx, vy, color = '#ff0055', radius = 3, isSplit = false, splitTimer = 0, type = 'normal', life = 999, width = 6, height = 6) {
+        spawn(x, y, vx, vy, color = '#ff0055', radius = 3, isSplit = false, splitTimer = 0, type = 'normal', life = 999, width = 6, height = 6, critChanceMultiplier = 1, critDamageMultiplier = 1) {
             this.x = x;
             this.y = y;
             this.vx = vx;
@@ -574,6 +574,8 @@
             this.maxLife = life;
             this.width = width;
             this.height = height;
+            this.critChanceMultiplier = critChanceMultiplier;
+            this.critDamageMultiplier = critDamageMultiplier;
             this.hitSet.clear();
         }
 
@@ -864,8 +866,11 @@
         shoot() {
             sfx.playLaser();
 
-            const fire = (x, y, vx, vy, color = '#00f0ff', radius = 3, type = 'normal', life = 999, w = 6, h = 6) => {
-                spawnFromPool(playerBulletPool, b => b.spawn(x, y, vx, vy, color, radius, false, 0, type, life, w, h));
+            const fire = (x, y, vx, vy, color = '#00f0ff', radius = 3, type = 'normal', life = 999, w = 6, h = 6, critChanceMultiplier = 1, critDamageMultiplier = 1) => {
+                spawnFromPool(playerBulletPool, b => b.spawn(
+                    x, y, vx, vy, color, radius, false, 0, type, life, w, h,
+                    critChanceMultiplier, critDamageMultiplier
+                ));
             };
 
             const cx = this.x + this.width / 2;
@@ -884,7 +889,8 @@
                     fire(this.x + this.width - 12, this.y, 1, -12);
                     fire(this.x + this.width - 6, this.y, 3, -11);
                 } else {
-                    fire(cx, this.y, 0, -12, '#ff00f0');
+                    // Lv4中央の赤弾：クリ率2倍＋クリダメ2倍
+                    fire(cx, this.y, 0, -12, '#ff00f0', 3, 'normal', 999, 6, 6, 2, 2);
                     fire(this.x + 8, this.y, -2.5, -11.5);
                     fire(this.x + this.width - 8, this.y, 2.5, -11.5);
                     fire(this.x, this.y + 4, -5, -10.5);
@@ -907,21 +913,37 @@
                 }
             } 
             else if (this.shipType === 2) {
-                // TYPE-3 強化：散弾数アップ＋集弾率アップ
+                // TYPE-3 強化：散弾数・集弾率・射程アップ＋中央散弾のクリティカル強化
                 const pelletCountMap = [8, 10, 12, 14];
                 const numPellets = pelletCountMap[shotPowerLevel - 1] || 14;
 
-                // 拡散角を狭くして、前方により密集させる。
+                // 拡散角をさらに絞って、重散弾を前方へ集中。
                 const spreadAngleMap = [0.72, 0.70, 0.68, 0.66];
                 const spreadAngle = spreadAngleMap[shotPowerLevel - 1] || 0.66;
+
+                // 散弾の射程を大幅延長。Lvが上がるほど遠くまで残る。
+                const rangeLifeMap = [28, 30, 32, 34];
+                const lifeTime = rangeLifeMap[shotPowerLevel - 1] || 34;
+
+                // 中央の数発だけ、通常よりクリ率2倍・クリダメ2倍。
+                // 現行の通常クリ倍率が「ダメージ2倍」なので、
+                // 強化対象はクリティカル時「ダメージ4倍」になる。
+                const centerCount = Math.min(4, Math.max(2, Math.ceil(numPellets * 0.25)));
+                const centerStart = Math.floor((numPellets - centerCount) / 2);
 
                 for (let i = 0; i < numPellets; i++) {
                     const angle = -Math.PI / 2 + (i / (numPellets - 1) - 0.5) * spreadAngle;
                     const speed = 9.5 + Math.random() * 1.5;
                     const vx = Math.cos(angle) * speed;
                     const vy = Math.sin(angle) * speed;
-                    const lifeTime = 18 + Math.floor(Math.random() * 5);
-                    fire(cx, this.y, vx, vy, '#f59e0b', 4, 'shotgun', lifeTime);
+                    const isCenterPellet = i >= centerStart && i < centerStart + centerCount;
+
+                    fire(
+                        cx, this.y, vx, vy, '#f59e0b', 4, 'shotgun', lifeTime,
+                        6, 6,
+                        isCenterPellet ? 2 : 1,
+                        isCenterPellet ? 2 : 1
+                    );
                 }
             } 
             else if (this.shipType === 3) {
@@ -1966,9 +1988,10 @@
                     if (!isPierce) bullet.active = false;
                     else bullet.hitSet.add(enemy);
 
-                    const isCrit = Math.random() < (critLevel * 0.05);
+                    const critChance = Math.min(1, critLevel * 0.05 * (bullet.critChanceMultiplier || 1));
+                    const isCrit = Math.random() < critChance;
                     const baseDamage = shotPowerLevel;
-                    const damage = isCrit ? baseDamage * 2 : baseDamage;
+                    const damage = isCrit ? baseDamage * 2 * (bullet.critDamageMultiplier || 1) : baseDamage;
                     const dmgColor = isCrit ? '#ff0055' : '#ffff00';
 
                     enemy.hp -= damage;
@@ -2005,9 +2028,10 @@
                         if (!isPierce) bullet.active = false;
                         else bullet.hitSet.add(part);
 
-                        const isCrit = Math.random() < (critLevel * 0.05);
+                        const critChance = Math.min(1, critLevel * 0.05 * (bullet.critChanceMultiplier || 1));
+                        const isCrit = Math.random() < critChance;
                         const baseDamage = shotPowerLevel;
-                        const damage = isCrit ? baseDamage * 2 : baseDamage;
+                        const damage = isCrit ? baseDamage * 2 * (bullet.critDamageMultiplier || 1) : baseDamage;
                         const dmgColor = isCrit ? '#ff0055' : '#ffff00';
 
                         part.hp -= damage;
