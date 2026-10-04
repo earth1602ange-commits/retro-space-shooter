@@ -8,7 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Retro Space Shooter EX - Ultimate Optimized Edition</title>
-    <!-- RETRO SPACE SHOOTER VERSION: v1.4.7 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.4.9 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -84,12 +84,31 @@
             animation: scanline 8s linear infinite;
             pointer-events: none;
         }
+    
+        .pause-button {
+            pointer-events: auto;
+            min-width: 58px;
+            height: 30px;
+            padding: 0 8px;
+            border: 1px solid rgba(0, 240, 255, 0.65);
+            border-radius: 6px;
+            background: rgba(2, 8, 20, 0.86);
+            color: #67e8f9;
+            font-size: 8px;
+            letter-spacing: 0.08em;
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.16);
+        }
+        .pause-button:active {
+            transform: scale(0.96);
+            background: rgba(8, 48, 70, 0.95);
+        }
+
     </style>
 </head>
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.4.7</div>
+        <div class="version-badge" aria-label="Game version">v1.4.9</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -102,9 +121,12 @@
             </div>
 
             <div class="flex flex-col items-end gap-2">
-                <div class="flex items-center gap-1">
-                    <span class="text-pink-500 mr-1 font-bold">HP:</span>
-                    <div id="lives-container" class="flex gap-1 text-xs md:text-sm">❤️❤️❤</div>
+                <div class="flex items-center gap-2 pointer-events-auto">
+                    <div class="flex items-center gap-1">
+                        <span class="text-pink-500 mr-1 font-bold">HP:</span>
+                        <div id="lives-container" class="flex gap-1 text-xs md:text-sm">❤️❤️❤</div>
+                    </div>
+                    <button id="btn-pause" class="pause-button">PAUSE</button>
                 </div>
             </div>
         </div>
@@ -117,6 +139,15 @@
             <div class="w-full h-4 bg-slate-900/90 border-2 border-purple-500 rounded-full p-0.5 overflow-hidden shadow-lg shadow-purple-500/40">
                 <div id="boss-hp-bar" class="h-full bg-gradient-to-r from-red-600 via-pink-500 to-purple-400 rounded-full transition-all duration-75" style="width: 100%;"></div>
             </div>
+        </div>
+
+
+        <div id="pause-screen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/72 backdrop-blur-[1px] pointer-events-auto hidden z-50">
+            <div class="text-cyan-300 text-3xl md:text-4xl font-bold tracking-[0.18em] neon-text-blue mb-3">PAUSED</div>
+            <div class="text-slate-400 text-[10px] mb-5">P / ESC で再開</div>
+            <button id="btn-resume" class="px-6 py-3 bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-bold rounded border border-cyan-300 shadow-[0_0_15px_rgba(0,240,255,.35)]">
+                RESUME
+            </button>
         </div>
 
         <div id="boss-warning" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none hidden z-20">
@@ -438,6 +469,9 @@
         bossHpBar: document.getElementById('boss-hp-bar'),
         bossHpText: document.getElementById('boss-hp-text'),
         bossWarning: document.getElementById('boss-warning'),
+        pauseScreen: document.getElementById('pause-screen'),
+        pauseButton: document.getElementById('btn-pause'),
+        resumeButton: document.getElementById('btn-resume'),
         stageBanner: document.getElementById('stage-up-banner'),
         title: document.getElementById('screen-title'),
         gameover: document.getElementById('screen-gameover'),
@@ -488,6 +522,7 @@
     const STATE_PLAYING = 1;
     const STATE_GAMEOVER = 2;
     const STATE_UPGRADE = 3;
+    const STATE_PAUSED = 4;
     let gameState = STATE_TITLE;
 
     let selectedShipType = 0;
@@ -1074,7 +1109,7 @@
                 this.rotSpeed = (Math.random() - 0.5) * 0.08;
                 this.shootTimer = 999999;
             } else {
-                // 高速編隊機：小型・高速・左右から隊列で侵入
+                // 高速編隊機：左右から侵入。出現位置と移動パターンは毎回ランダム。
                 this.width = 18;
                 this.height = 18;
                 this.hp = 1 + Math.floor(bossLevel * 0.5);
@@ -1084,6 +1119,12 @@
                 this.rotAngle = 0;
                 this.rotSpeed = 0;
                 this.shootTimer = 999999;
+                this.formationMoveType = 2;
+                this.formationBaseY = 0;
+                this.formationPhase = 0;
+                this.rotRemaining = 0;
+                this.homingStrength = 0.11;
+                this.formSpeed = 7.8;
             }
 
             this.x = Math.random() * (GAME_WIDTH - this.width);
@@ -1092,16 +1133,52 @@
 
         update() {
             if (this.type === 3) {
-                this.x += this.speedX;
-                this.y += this.speedY;
+                if (this.formationMoveType === 0) {
+                    // ① 公転型：仮想中心の周りを小さく旋回しながら前進。
+                    // 自機そのものが回るのではなく、敵の軌道が円弧になる。
+                    this.orbitAngle += 0.11 * this.formationDirection;
+                    this.x += this.speedX;
+                    this.y = this.formationBaseY
+                        + Math.sin(this.orbitAngle + this.formationPhase) * 18;
 
-                // 隊列を崩さず高速で画面を横切る
-                this.rotAngle += 0.12 * this.formationDirection;
-                if (this.formationDirection < 0) this.rotAngle = Math.PI + Math.sin(this.x * 0.02) * 0.08;
-                else this.rotAngle = Math.sin(this.x * 0.02) * 0.08;
+                    // 横方向にも少し円運動を加えて、きれいな公転軌道にする。
+                    this.x += Math.cos(this.orbitAngle + this.formationPhase) * 7;
 
-                if (this.x < -60 || this.x > GAME_WIDTH + 60 ||
-                    this.y < -60 || this.y > GAME_HEIGHT + 60) {
+                    this.rotAngle = Math.atan2(
+                        Math.cos(this.orbitAngle + this.formationPhase) * 2,
+                        this.speedX
+                    );
+
+                } else if (this.formationMoveType === 1) {
+                    // ② 自機狙い：徐々に自機へ向かう。
+                    const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
+                    const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+                    const distance = Math.max(1, Math.hypot(dx, dy));
+                    const desiredVx = (dx / distance) * this.formSpeed;
+                    const desiredVy = (dy / distance) * this.formSpeed;
+
+                    this.speedX += (desiredVx - this.speedX) * this.homingStrength;
+                    this.speedY += (desiredVy - this.speedY) * this.homingStrength;
+
+                    const currentSpeed = Math.hypot(this.speedX, this.speedY);
+                    if (currentSpeed > this.formSpeed) {
+                        this.speedX = (this.speedX / currentSpeed) * this.formSpeed;
+                        this.speedY = (this.speedY / currentSpeed) * this.formSpeed;
+                    }
+
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                    this.rotAngle = Math.atan2(this.speedY, this.speedX);
+
+                } else {
+                    // ③ 直進：横方向へまっすぐ進む。
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                    this.rotAngle = this.formationDirection > 0 ? 0 : Math.PI;
+                }
+
+                if (this.x < -70 || this.x > GAME_WIDTH + 70 ||
+                    this.y < -70 || this.y > GAME_HEIGHT + 70) {
                     this.active = false;
                 }
                 return;
@@ -1439,30 +1516,61 @@
     let enemySpawnTimer = 0;
 
     function spawnFormationWave() {
-        const fromLeft = formationDirection < 0;
+        const fromLeft = Math.random() < 0.5;
         const count = 7;
-        const startY = 105;
-        const spacingY = 27;
-        const gapX = 22;
+        const spacingY = 26;
         const speed = 8.5;
+
+        // 出現位置を上下方向にもランダム化。
+        const totalHeight = spacingY * (count - 1);
+        const minY = 105;
+        const maxY = Math.max(minY, GAME_HEIGHT * 0.68 - totalHeight);
+        const startY = minY + Math.random() * Math.max(0, maxY - minY);
+
+        // 3パターンをランダムに決定：
+        // 0 = 公転、1 = 自機狙い、2 = 直進
+        const moveType = Math.floor(Math.random() * 3);
 
         for (let i = 0; i < count; i++) {
             const enemy = new Enemy(3);
             enemy.formationDirection = fromLeft ? 1 : -1;
-            enemy.speedX = enemy.formationDirection * speed;
-            enemy.speedY = 0.15;
-            enemy.y = startY + i * spacingY;
+            enemy.formationMoveType = moveType;
+            enemy.formationBaseY = startY + i * spacingY;
+            enemy.formationPhase = i * 0.55;
+            enemy.orbitAngle = i * 0.55;
 
             if (fromLeft) {
-                enemy.x = -enemy.width - i * gapX;
+                enemy.x = -enemy.width - 10 - i * 10;
             } else {
-                enemy.x = GAME_WIDTH + i * gapX;
+                enemy.x = GAME_WIDTH + 10 + i * 10;
+            }
+            enemy.y = enemy.formationBaseY;
+
+            if (moveType === 0) {
+                // 一回転しながらほぼ直進。
+                enemy.speedX = enemy.formationDirection * speed;
+                enemy.speedY = 0;
+                enemy.rotAngle = 0;
+                enemy.rotRemaining = Math.PI * 2;
+                enemy.rotSpeed = 0.16;
+            } else if (moveType === 1) {
+                // 自機方向へ少しずつ軌道修正。
+                enemy.speedX = enemy.formationDirection * speed * 0.86;
+                enemy.speedY = 0;
+                enemy.homingStrength = 0.11;
+                enemy.formSpeed = speed * 0.92;
+            } else {
+                // まっすぐ横切る。
+                enemy.speedX = enemy.formationDirection * speed;
+                enemy.speedY = 0.12;
+                enemy.rotAngle = 0;
             }
 
             enemies.push(enemy);
         }
 
-        formationDirection *= -1;
+        // 次回の左右は固定交互ではなく、毎回ランダム。
+        formationDirection = Math.random() < 0.5 ? -1 : 1;
     }
 
     // ---------------------------------------------------------------
@@ -1896,6 +2004,27 @@
         ui.upgrade.classList.add('hidden');
     }
 
+
+    function setPaused(paused) {
+        if (paused) {
+            if (gameState !== STATE_PLAYING) return;
+            gameState = STATE_PAUSED;
+            ui.pauseScreen.classList.remove('hidden');
+            ui.pauseButton.textContent = 'RESUME';
+        } else {
+            if (gameState !== STATE_PAUSED) return;
+            gameState = STATE_PLAYING;
+            ui.pauseScreen.classList.add('hidden');
+            ui.pauseButton.textContent = 'PAUSE';
+            lastFrameTime = performance.now();
+        }
+    }
+
+    function togglePause() {
+        if (gameState === STATE_PLAYING) setPaused(true);
+        else if (gameState === STATE_PAUSED) setPaused(false);
+    }
+
     function returnToTitle() {
         gameState = STATE_TITLE;
         ui.gameover.classList.add('hidden');
@@ -1904,6 +2033,7 @@
         ui.hud.classList.add('hidden');
         ui.bossHud.classList.add('hidden');
         ui.bossWarning.classList.add('hidden');
+        ui.pauseScreen.classList.add('hidden');
         ui.stageBanner.classList.add('hidden');
         ui.upgrade.classList.add('hidden');
         ui.high.innerText = String(highScore).padStart(6, '0');
@@ -2192,7 +2322,7 @@
             ctx.fillRect(star.x, star.y, star.size, star.size);
         }
 
-        if (gameState === STATE_PLAYING || gameState === STATE_UPGRADE) {
+        if (gameState === STATE_PLAYING || gameState === STATE_UPGRADE || gameState === STATE_PAUSED) {
             player.draw();
         }
 
@@ -2221,6 +2351,11 @@
     window.addEventListener('keydown', e => {
         keys[e.code] = true;
         keys[e.key] = true;
+
+        if (e.code === 'KeyP' || e.code === 'Escape') {
+            e.preventDefault();
+            togglePause();
+        }
     });
 
     window.addEventListener('keyup', e => {
@@ -2285,6 +2420,8 @@
     ui.upgradeButtons.crit.addEventListener('click', () => selectUpgrade('crit'));
     ui.upgradeButtons.hp.addEventListener('click', () => selectUpgrade('hp'));
 
+    ui.pauseButton.addEventListener('click', togglePause);
+    ui.resumeButton.addEventListener('click', () => setPaused(false));
     ui.startButton.addEventListener('click', openShipSelectScreen);
     ui.restartButton.addEventListener('click', openShipSelectScreen);
     ui.titleButton.addEventListener('click', returnToTitle);
