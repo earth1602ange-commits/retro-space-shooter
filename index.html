@@ -256,10 +256,11 @@
 
             <div class="w-full max-w-xs bg-slate-950/95 border border-cyan-400/60 rounded-xl p-4 mb-6 shadow-lg shadow-cyan-500/10">
                 <div class="text-cyan-300 font-bold text-sm tracking-wider mb-1">RANKING ENTRY</div>
-                <div class="text-[10px] text-slate-400 mb-3">名前を入力してスコアを登録</div>
-                <input id="ranking-name-input" type="text" maxlength="10" autocomplete="off" spellcheck="false" placeholder="PLAYER" class="w-full box-border bg-slate-900 border border-slate-600 focus:border-cyan-400 outline-none rounded-lg px-3 py-2 text-center text-white text-sm tracking-wider mb-3">
+                <div class="text-[10px] text-slate-400 mb-3">名前を入力してスコアを登録・更新</div>
+                <input id="ranking-name-input" type="text" maxlength="10" autocomplete="off" spellcheck="false" placeholder="PLAYER" class="w-full box-border bg-slate-900 border border-slate-600 focus:border-cyan-400 outline-none rounded-lg px-3 py-2 text-center text-white text-sm tracking-wider mb-2">
+                <div id="ranking-submit-status" class="min-h-[16px] text-[10px] text-red-400 mb-2"></div>
                 <button id="btn-submit-ranking" class="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs rounded-lg transition active:scale-95 neon-box">
-                    REGISTER SCORE
+                    SUBMIT SCORE
                 </button>
             </div>
 
@@ -447,6 +448,7 @@
         ranking: document.getElementById('screen-ranking'),
         rankingList: document.getElementById('ranking-list'),
         rankingNameInput: document.getElementById('ranking-name-input'),
+        rankingSubmitStatus: document.getElementById('ranking-submit-status'),
         submitRanking: document.getElementById('btn-submit-ranking'),
         titleRankingButton: document.getElementById('btn-title-ranking'),
         rankingCloseButton: document.getElementById('btn-ranking-close'),
@@ -489,6 +491,13 @@
     let gameState = STATE_TITLE;
 
     let selectedShipType = 0;
+    const SHIP_NAMES = [
+        'TYPE-1: STANDARD',
+        'TYPE-2: CRESCENT BLADE',
+        'TYPE-3: HEAVY SHOTGUN',
+        'TYPE-4: MISSILE POD'
+    ];
+    const SHIP_EMOJIS = ['🚀', '🌙', '💥', '🛰️'];
     let score = 0;
     let highScore = Number(localStorage.getItem('retro_space_high_opt') || 0);
     // ===============================================================
@@ -1395,6 +1404,16 @@
     // ---------------------------------------------------------------
     // 05. Game flow / UI
     // ---------------------------------------------------------------
+    function getShipName(shipType) {
+        const index = Number(shipType);
+        return SHIP_NAMES[index] || 'UNKNOWN SHIP';
+    }
+
+    function getShipEmoji(shipType) {
+        const index = Number(shipType);
+        return SHIP_EMOJIS[index] || '🚀';
+    }
+
     function cleanRankingName(name) {
         return String(name || 'PLAYER').trim().replace(/[<>]/g, '').slice(0, 10) || 'PLAYER';
     }
@@ -1420,7 +1439,7 @@
             return rankingCache;
         }
         try {
-            const response = await fetch(`${SUPABASE_SCORES_URL}?select=player_name,score,created_at&order=score.desc,created_at.asc&limit=${RANKING_LIMIT}`, {
+            const response = await fetch(`${SUPABASE_SCORES_URL}?select=player_name,score,ship_type,created_at&order=score.desc,created_at.asc&limit=${RANKING_LIMIT}`, {
                 method: 'GET',
                 headers: {
                     apikey: SUPABASE_ANON_KEY,
@@ -1437,6 +1456,7 @@
             const ranking = rows.map(row => ({
                 name: cleanRankingName(row.player_name),
                 score: Number(row.score) || 0,
+                shipType: Number(row.ship_type) || 0,
                 date: row.created_at ? Date.parse(row.created_at) : Date.now()
             }));
 
@@ -1455,11 +1475,71 @@
         }
     }
 
-    async function saveRanking(name, value) {
+    async function saveRanking(name, value, shipType) {
         const cleanName = cleanRankingName(name);
         const cleanScore = Math.max(0, Math.floor(Number(value) || 0));
+        const cleanShipType = Math.max(0, Math.min(3, Math.floor(Number(shipType) || 0)));
 
         try {
+            // 同じ名前が既にあるか確認する。名前は「重複禁止」ではなく、
+            // 同じプレイヤーのベストスコアを更新するためのキーとして使う。
+            const lookupUrl = `${SUPABASE_SCORES_URL}?select=id,player_name,score,ship_type,created_at&player_name=ilike.${encodeURIComponent(cleanName)}&limit=1`;
+            const lookupResponse = await fetch(lookupUrl, {
+                method: 'GET',
+                headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+                },
+                cache: 'no-store'
+            });
+
+            if (!lookupResponse.ok) {
+                const message = await lookupResponse.text();
+                throw new Error(`Supabase lookup ${lookupResponse.status}: ${message}`);
+            }
+
+            const existingRows = await lookupResponse.json();
+            const existing = existingRows[0] || null;
+
+            // 既存プレイヤーなら、低いスコアでは更新せず、
+            // 高いスコアのときだけスコア・使用機体・日時を更新する。
+            if (existing) {
+                const oldScore = Number(existing.score) || 0;
+
+                if (cleanScore <= oldScore) {
+                    rankingOnline = true;
+                    rankingCache = null;
+                    rankingCacheTime = 0;
+                    return { ok: true, updated: false, bestScoreKept: true, oldScore };
+                }
+
+                const updateResponse = await fetch(`${SUPABASE_SCORES_URL}?id=eq.${encodeURIComponent(existing.id)}`, {
+                    method: 'PATCH',
+                    headers: {
+                        apikey: SUPABASE_ANON_KEY,
+                        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        Prefer: 'return=representation'
+                    },
+                    body: JSON.stringify({
+                        score: cleanScore,
+                        ship_type: cleanShipType,
+                        created_at: new Date().toISOString()
+                    })
+                });
+
+                if (!updateResponse.ok) {
+                    const message = await updateResponse.text();
+                    throw new Error(`Supabase PATCH ${updateResponse.status}: ${message}`);
+                }
+
+                rankingOnline = true;
+                rankingCache = null;
+                rankingCacheTime = 0;
+                return { ok: true, updated: true, bestScoreKept: false, oldScore };
+            }
+
+            // 初回登録。
             const response = await fetch(SUPABASE_SCORES_URL, {
                 method: 'POST',
                 headers: {
@@ -1470,7 +1550,8 @@
                 },
                 body: JSON.stringify({
                     player_name: cleanName,
-                    score: cleanScore
+                    score: cleanScore,
+                    ship_type: cleanShipType
                 })
             });
 
@@ -1482,16 +1563,32 @@
             rankingOnline = true;
             rankingCache = null;
             rankingCacheTime = 0;
-            return true;
+            return { ok: true, updated: false, bestScoreKept: false };
         } catch (error) {
             console.error('Online score submission failed.', error);
             rankingOnline = false;
-            // Keep a local copy so a temporary network problem does not erase the result.
+
+            // Keep a local copy only for genuine network/API failures.
             const ranking = loadCachedRanking();
-            ranking.push({ name: cleanName, score: cleanScore, date: Date.now() });
+            const localIndex = ranking.findIndex(row => String(row.name).toLowerCase() === cleanName.toLowerCase());
+            const localRow = {
+                name: cleanName,
+                score: cleanScore,
+                shipType: cleanShipType,
+                date: Date.now()
+            };
+
+            if (localIndex >= 0) {
+                if (cleanScore > Number(ranking[localIndex].score || 0)) {
+                    ranking[localIndex] = localRow;
+                }
+            } else {
+                ranking.push(localRow);
+            }
+
             ranking.sort((a, b) => Number(b.score) - Number(a.score) || Number(a.date) - Number(b.date));
             cacheRanking(ranking);
-            return false;
+            return { ok: false, updated: false, bestScoreKept: false };
         }
     }
 
@@ -1508,9 +1605,14 @@
             const rank = index + 1;
             const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : String(rank).padStart(2, '0');
             const name = String(row.name || 'PLAYER').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
-            return `<div class="grid grid-cols-[40px_1fr_90px] items-center gap-2 bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-2 text-left ${rank <= 3 ? 'border-cyan-500/30' : ''}">
+            const shipName = getShipName(row.shipType);
+            const shipEmoji = getShipEmoji(row.shipType);
+            return `<div class="grid grid-cols-[40px_1fr_100px] items-center gap-2 bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-2 text-left ${rank <= 3 ? 'border-cyan-500/30' : ''}">
                 <span class="text-center text-xs text-cyan-300 font-bold">${medal}</span>
-                <span class="text-xs text-slate-200 truncate">${name}</span>
+                <div class="min-w-0">
+                    <div class="text-xs text-slate-200 truncate">${name}</div>
+                    <div class="text-[9px] text-slate-500 truncate">${shipEmoji} ${shipName}</div>
+                </div>
                 <span class="text-right text-xs text-yellow-300 font-mono">${String(Number(row.score)).padStart(6, '0')}</span>
             </div>`;
         }).join('');
@@ -1537,12 +1639,27 @@
         if (rankingSubmitted) return;
 
         const name = ui.rankingNameInput.value || 'PLAYER';
+        ui.rankingSubmitStatus.innerText = '';
         ui.submitRanking.disabled = true;
         ui.submitRanking.innerText = 'SENDING...';
 
-        const success = await saveRanking(name, score);
+        const result = await saveRanking(name, score, selectedShipType);
+
         rankingSubmitted = true;
-        ui.submitRanking.innerText = success ? 'REGISTERED ✓' : 'SAVED LOCALLY';
+
+        if (result.ok && result.bestScoreKept) {
+            ui.submitRanking.innerText = 'BEST SCORE KEPT ✓';
+            ui.rankingSubmitStatus.innerText = `現在のベストスコア ${String(result.oldScore).padStart(6, '0')} を維持しました。`;
+        } else if (result.ok && result.updated) {
+            ui.submitRanking.innerText = 'SCORE UPDATED ✓';
+            ui.rankingSubmitStatus.innerText = '自己ベストを更新しました！';
+        } else if (result.ok) {
+            ui.submitRanking.innerText = 'REGISTERED ✓';
+            ui.rankingSubmitStatus.innerText = '';
+        } else {
+            ui.submitRanking.innerText = 'SAVED LOCALLY';
+            ui.rankingSubmitStatus.innerText = 'オンライン登録に失敗したため、この端末に一時保存しました。';
+        }
         ui.gameover.classList.add('hidden');
         ui.ranking.classList.remove('hidden');
         await renderRanking();
@@ -1695,8 +1812,9 @@
         gameState = STATE_GAMEOVER;
         rankingSubmitted = false;
         ui.rankingNameInput.value = '';
+        ui.rankingSubmitStatus.innerText = '';
         ui.submitRanking.disabled = false;
-        ui.submitRanking.innerText = 'REGISTER SCORE';
+        ui.submitRanking.innerText = 'SUBMIT SCORE';
         if (score > highScore) {
             highScore = score;
             localStorage.setItem('retro_space_high_opt', highScore);
