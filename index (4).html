@@ -570,7 +570,7 @@ upgradeButtons: {
     let hpUpgradesCount = 0;
 // ===== WEAPON SYSTEM =====
 const MAX_WEAPONS = 3;
-const WEAPON_OFFER_CHANCE = 0.20;
+const WEAPON_OFFER_CHANCE = 0.80;
 
 const ownedWeapons = [];
 const currentUpgradeOptions = [null, null, null, null];
@@ -1953,7 +1953,7 @@ const electricLinks = [];
     function buildUpgradeOptions() {
     const options = ['shot', 'rate', 'crit', 'hp'];
 
-    // 武器を3つ未満所持していて、20%の確率に当選したら
+    // 武器を3つ未満所持していて、40%の確率に当選したら
     // 既存4枠のうち1枠を未取得武器に置き換える
     if (ownedWeapons.length < MAX_WEAPONS && Math.random() < WEAPON_OFFER_CHANCE) {
         const availableWeapons = Object.keys(WEAPON_DEFS)
