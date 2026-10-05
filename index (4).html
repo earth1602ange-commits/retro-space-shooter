@@ -2520,10 +2520,6 @@ ui.upgradeSlots.forEach((slot, index) => {
     slot.button.addEventListener('click', () => selectUpgradeSlot(index));
 });
 
-ui.pauseButton.addEventListener('click', togglePause);
-ui.resumeButton.addEventListener('click', () => setPaused(false));
-ui.startButton.addEventListener('click', 'openShipSelectScreen');
-
     ui.pauseButton.addEventListener('click', togglePause);
     ui.resumeButton.addEventListener('click', () => setPaused(false));
     ui.startButton.addEventListener('click', openShipSelectScreen);
