@@ -2505,10 +2505,17 @@ function startGame() {
     ui.touchFireButton.addEventListener('mouseup', () => { isFiringTouch = false; });
     ui.touchFireButton.addEventListener('mouseleave', () => { isFiringTouch = false; });
 
-    ui.upgradeButtons.shot.addEventListener('click', () => selectUpgrade('shot'));
-    ui.upgradeButtons.rate.addEventListener('click', () => selectUpgrade('rate'));
-    ui.upgradeButtons.crit.addEventListener('click', () => selectUpgrade('crit'));
-    ui.upgradeButtons.hp.addEventListener('click', () => selectUpgrade('hp'));
+    ui.touchFireButton.addEventListener('mousedown', () => { isFiringTouch = true; });
+ui.touchFireButton.addEventListener('mouseup', () => { isFiringTouch = false; });
+ui.touchFireButton.addEventListener('mouseleave', () => { isFiringTouch = false; });
+
+ui.upgradeSlots.forEach((slot, index) => {
+    slot.button.addEventListener('click', () => selectUpgradeSlot(index));
+});
+
+ui.pauseButton.addEventListener('click', togglePause);
+ui.resumeButton.addEventListener('click', () => setPaused(false));
+ui.startButton.addEventListener('click', 'openShipSelectScreen');
 
     ui.pauseButton.addEventListener('click', togglePause);
     ui.resumeButton.addEventListener('click', () => setPaused(false));
