@@ -488,18 +488,14 @@
         rankingCloseButton: document.getElementById('btn-ranking-close'),
 
         // Upgrade controls
-        upgradeButtons: {
-            shot: document.getElementById('btn-upg-shot'),
-            rate: document.getElementById('btn-upg-rate'),
-            crit: document.getElementById('btn-upg-crit'),
-            hp: document.getElementById('btn-upg-hp')
-        },
-        upgradeLabels: {
-            shot: { badge: document.getElementById('badge-shot'), status: document.getElementById('status-shot') },
-            rate: { badge: document.getElementById('badge-rate'), status: document.getElementById('status-rate') },
-            crit: { badge: document.getElementById('badge-crit'), status: document.getElementById('status-crit') },
-            hp: { badge: document.getElementById('badge-hp'), title: document.getElementById('title-hp'), desc: document.getElementById('desc-hp') }
-        },
+upgradeSlots: [0, 1, 2, 3].map(index => ({
+    button: document.getElementById(`btn-upg-${index}`),
+    icon: document.getElementById(`upgrade-icon-${index}`),
+    badge: document.getElementById(`badge-upg-${index}`),
+    title: document.getElementById(`title-upg-${index}`),
+    desc: document.getElementById(`desc-upg-${index}`),
+    status: document.getElementById(`status-upg-${index}`)
+})),
         startButton: document.getElementById('btn-start'),
         restartButton: document.getElementById('btn-restart'),
         titleButton: document.getElementById('btn-title'),
