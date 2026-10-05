@@ -8,7 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Retro Space Shooter EX - Ultimate Optimized Edition</title>
-    <!-- RETRO SPACE SHOOTER VERSION: v1.4.9 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.4.10 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -108,7 +108,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.4.9</div>
+        <div class="version-badge" aria-label="Game version">v1.4.10</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -185,7 +185,7 @@
                         <span class="text-sm">🌙</span>
                     </div>
                     <div class="text-left text-slate-300 text-[9px] leading-relaxed">
-                        【斬撃消弾型】巨大な三日月状カッターを発射。<br>敵弾を相殺・消去しながら敵を両断する。
+                        【3連バースト斬撃型】三日月ブレードを短時間に連射。<br>中央ブレードだけが敵弾をガードできる。
                     </div>
                 </button>
 
@@ -611,6 +611,7 @@
             this.height = height;
             this.critChanceMultiplier = critChanceMultiplier;
             this.critDamageMultiplier = critDamageMultiplier;
+            this.canGuard = false;
             this.hitSet.clear();
         }
 
@@ -842,6 +843,8 @@
             this.height = 32;
             this.shipType = 0;
             this.missileToggle = false;
+            this.burstShotsRemaining = 0;
+            this.burstDelay = 0;
             this.reset();
         }
 
@@ -873,25 +876,47 @@
             this.y = Math.max(0, Math.min(GAME_HEIGHT - this.height, this.y));
 
             if (this.shootCooldown > 0) this.shootCooldown--;
-            
+
             const isFirePressed = keys['Space'] || keys[' '] || isFiringTouch;
-            if (gameState === STATE_PLAYING && isFirePressed && this.shootCooldown === 0) {
-                this.shoot();
-                
-                if (this.shipType === 0) {
-                    const baseCooldownMap = [10, 7, 5, 3];
-                    const base = baseCooldownMap[fireRateLevel - 1] || 3;
-                    this.shootCooldown = Math.max(2, Math.round(base * 0.8));
-                } else if (this.shipType === 1) {
-                    // 40% 発射レートを下げる（クールダウンを増加）
-                    const cooldownMap = [18, 14, 10, 7];
-                    this.shootCooldown = cooldownMap[fireRateLevel - 1] || 7;
-                } else if (this.shipType === 2) {
-                    const cooldownMap = [18, 14, 11, 8];
-                    this.shootCooldown = cooldownMap[fireRateLevel - 1] || 8;
-                } else if (this.shipType === 3) {
-                    const cooldownMap = [14, 10, 8, 5];
-                    this.shootCooldown = cooldownMap[fireRateLevel - 1] || 5;
+
+            if (gameState === STATE_PLAYING) {
+                // TYPE-2は通常連射ではなく、短い3連バーストへ。
+                if (this.shipType === 1 && this.burstShotsRemaining > 0) {
+                    if (this.burstDelay > 0) {
+                        this.burstDelay--;
+                    } else {
+                        this.shoot();
+                        this.burstShotsRemaining--;
+
+                        if (this.burstShotsRemaining > 0) {
+                            this.burstDelay = 4;
+                        } else {
+                            const burstCooldownMap = [26, 22, 18, 15];
+                            this.shootCooldown = burstCooldownMap[fireRateLevel - 1] || 15;
+                        }
+                    }
+                } else if (isFirePressed && this.shootCooldown === 0) {
+                    if (this.shipType === 1) {
+                        // 1回の入力で3連発。撃ち切った後は再装填時間。
+                        this.shoot();
+                        this.burstShotsRemaining = 2;
+                        this.burstDelay = 4;
+                        this.shootCooldown = 9999;
+                    } else {
+                        this.shoot();
+
+                        if (this.shipType === 0) {
+                            const baseCooldownMap = [10, 7, 5, 3];
+                            const base = baseCooldownMap[fireRateLevel - 1] || 3;
+                            this.shootCooldown = Math.max(2, Math.round(base * 0.8));
+                        } else if (this.shipType === 2) {
+                            const cooldownMap = [18, 14, 11, 8];
+                            this.shootCooldown = cooldownMap[fireRateLevel - 1] || 8;
+                        } else if (this.shipType === 3) {
+                            const cooldownMap = [14, 10, 8, 5];
+                            this.shootCooldown = cooldownMap[fireRateLevel - 1] || 5;
+                        }
+                    }
                 }
             }
 
@@ -901,11 +926,14 @@
         shoot() {
             sfx.playLaser();
 
-            const fire = (x, y, vx, vy, color = '#00f0ff', radius = 3, type = 'normal', life = 999, w = 6, h = 6, critChanceMultiplier = 1, critDamageMultiplier = 1) => {
-                spawnFromPool(playerBulletPool, b => b.spawn(
-                    x, y, vx, vy, color, radius, false, 0, type, life, w, h,
-                    critChanceMultiplier, critDamageMultiplier
-                ));
+            const fire = (x, y, vx, vy, color = '#00f0ff', radius = 3, type = 'normal', life = 999, w = 6, h = 6, critChanceMultiplier = 1, critDamageMultiplier = 1, canGuard = false) => {
+                spawnFromPool(playerBulletPool, b => {
+                    b.spawn(
+                        x, y, vx, vy, color, radius, false, 0, type, life, w, h,
+                        critChanceMultiplier, critDamageMultiplier
+                    );
+                    b.canGuard = canGuard;
+                });
             };
 
             const cx = this.x + this.width / 2;
@@ -933,18 +961,21 @@
                 }
             } 
             else if (this.shipType === 1) {
-                // 速度を40%低下（-9 → -5.4 等）、射程維持のためlifeも調整
+                // TYPE-2 弱体化：3連バースト＋弾消しは中央ブレードだけ。
                 const bladeWidths = [85, 105, 125, 150];
                 const bw = bladeWidths[shotPowerLevel - 1];
-                fire(cx, this.y - 15, 0, -5.4, '#ff2a6d', 0, 'blade', 35, bw, bw * 0.5);
+
+                // 中央ブレードだけ敵弾をガード。
+                fire(cx, this.y - 15, 0, -5.4, '#ff2a6d', 0, 'blade', 35, bw, bw * 0.5, 1, 1, true);
 
                 if (shotPowerLevel >= 2) {
-                    fire(cx - 20, this.y, -1.5, -5.1, '#ff758c', 0, 'blade', 30, bw * 0.6, bw * 0.3);
-                    fire(cx + 20, this.y, 1.5, -5.1, '#ff758c', 0, 'blade', 30, bw * 0.6, bw * 0.3);
+                    // サイドブレードは攻撃専用。
+                    fire(cx - 20, this.y, -1.5, -5.1, '#ff758c', 0, 'blade', 30, bw * 0.6, bw * 0.3, 1, 1, false);
+                    fire(cx + 20, this.y, 1.5, -5.1, '#ff758c', 0, 'blade', 30, bw * 0.6, bw * 0.3, 1, 1, false);
                 }
                 if (shotPowerLevel >= 4) {
-                    fire(cx - 35, this.y + 5, -3.0, -4.8, '#ff758c', 0, 'blade', 25, bw * 0.5, bw * 0.25);
-                    fire(cx + 35, this.y + 5, 3.0, -4.8, '#ff758c', 0, 'blade', 25, bw * 0.5, bw * 0.25);
+                    fire(cx - 35, this.y + 5, -3.0, -4.8, '#ff758c', 0, 'blade', 25, bw * 0.5, bw * 0.25, 1, 1, false);
+                    fire(cx + 35, this.y + 5, 3.0, -4.8, '#ff758c', 0, 'blade', 25, bw * 0.5, bw * 0.25, 1, 1, false);
                 }
             } 
             else if (this.shipType === 2) {
@@ -2077,10 +2108,10 @@
     // 06. Collision / update / render
     // ---------------------------------------------------------------
     function checkCollisions() {
-        // Player Bullets vs Enemy Bullets (Type 2 Crescent Blade bullet cancellation)
+        // Player Bullets vs Enemy Bullets (Type 2: center blade only)
         for (let i = 0; i < playerBulletPool.length; i++) {
             const pb = playerBulletPool[i];
-            if (!pb.active || pb.type !== 'blade') continue;
+            if (!pb.active || pb.type !== 'blade' || !pb.canGuard) continue;
 
             for (let j = 0; j < enemyBulletPool.length; j++) {
                 const eb = enemyBulletPool[j];
