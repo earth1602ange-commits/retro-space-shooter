@@ -109,7 +109,7 @@
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
         <div class="version-badge" aria-label="Game version">v1.4.10</div>
-        <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
+        <canvas id="gameCanvas" style="touch-action:none;" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
 
@@ -322,7 +322,7 @@
             </div>
 
             <div class="pointer-events-auto">
-                <button id="btn-touch-fire" class="w-16 h-16 bg-cyan-500/30 border-2 border-cyan-400 rounded-full flex items-center justify-center text-xs font-bold text-cyan-300 active:bg-cyan-500/80 shadow-lg shadow-cyan-500/30 active:scale-95 transition">
+                <button id="btn-touch-fire" style="touch-action:none;" class="w-16 h-16 bg-cyan-500/30 border-2 border-cyan-400 rounded-full flex items-center justify-center text-xs font-bold text-cyan-300 active:bg-cyan-500/80 shadow-lg shadow-cyan-500/30 active:scale-95 transition">
                     FIRE
                 </button>
             </div>
@@ -566,11 +566,12 @@
     let critLevel = 0;
     let hpUpgradesCount = 0;
 
-    const keys = {};
-    let isFiringTouch = false;
-    let touchX = null;
-    let touchY = null;
-    let isTouching = false;
+   const keys = {};
+let isFiringTouch = false;
+let touchX = null;
+let touchY = null;
+let isTouching = false;
+let gameTouchId = null;
 
     // ---------------------------------------------------------------
     // 04. World data / object pools
@@ -2405,43 +2406,124 @@
         sy = GAME_HEIGHT / canvasRect.height;
     }, { passive: true });
 
-    function updateTouchPos(e) {
-        if (!e.touches || e.touches.length === 0) return;
-        const clientX = e.touches[0].clientX;
-        const clientY = e.touches[0].clientY;
-        touchX = (clientX - canvasRect.left) * sx;
-        touchY = (clientY - canvasRect.top) * sy;
+   function refreshCanvasMetrics() {
+    canvasRect = canvas.getBoundingClientRect();
+    sx = GAME_WIDTH / canvasRect.width;
+    sy = GAME_HEIGHT / canvasRect.height;
+}
+
+function getTrackedGameTouch(e) {
+    if (gameTouchId === null || !e.touches) return null;
+
+    for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier === gameTouchId) {
+            return e.touches[i];
+        }
     }
 
-    container.addEventListener('touchstart', e => {
-        if (gameState !== STATE_PLAYING) return;
-        if (e.target.closest('#touch-controls') || e.target.closest('#screen-upgrade') || e.target.closest('#screen-select-ship')) return;
-        isTouching = true;
-        updateTouchPos(e);
-    }, { passive: true });
+    return null;
+}
 
-    container.addEventListener('touchmove', e => {
-        if (!isTouching) return;
-        if (e.target.closest('#touch-controls') || e.target.closest('#screen-upgrade') || e.target.closest('#screen-select-ship')) return;
-        updateTouchPos(e);
-    }, { passive: true });
+function updateTouchPosFromTouch(touch) {
+    if (!touch) return;
 
-    container.addEventListener('touchend', e => {
-        if (!e.touches || e.touches.length === 0) {
+    touchX = (touch.clientX - canvasRect.left) * sx;
+    touchY = (touch.clientY - canvasRect.top) * sy;
+
+    touchX = Math.max(0, Math.min(GAME_WIDTH, touchX));
+    touchY = Math.max(0, Math.min(GAME_HEIGHT, touchY));
+}
+
+container.addEventListener('touchstart', e => {
+    if (gameState !== STATE_PLAYING) return;
+
+    const isUIControl =
+        e.target.closest('#touch-controls') ||
+        e.target.closest('#screen-upgrade') ||
+        e.target.closest('#screen-select-ship') ||
+        e.target.closest('#pause-screen');
+
+    if (isUIControl) return;
+
+    // すでに移動用の指を追跡中なら、新しい指は無視
+    if (gameTouchId !== null) return;
+
+    refreshCanvasMetrics();
+
+    const touch = e.changedTouches && e.changedTouches.length > 0
+        ? e.changedTouches[0]
+        : null;
+
+    if (!touch) return;
+
+    gameTouchId = touch.identifier;
+    isTouching = true;
+
+    updateTouchPosFromTouch(touch);
+
+    e.preventDefault();
+}, { passive: false });
+
+container.addEventListener('touchmove', e => {
+    if (!isTouching || gameTouchId === null) return;
+
+    const touch = getTrackedGameTouch(e);
+    if (!touch) return;
+
+    updateTouchPosFromTouch(touch);
+
+    e.preventDefault();
+}, { passive: false });
+
+container.addEventListener('touchend', e => {
+    if (gameTouchId === null) return;
+
+    let endedGameTouch = false;
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === gameTouchId) {
+            endedGameTouch = true;
+            break;
+        }
+    }
+
+    if (endedGameTouch) {
+        gameTouchId = null;
+        isTouching = false;
+        touchX = null;
+        touchY = null;
+    }
+}, { passive: true });
+
+container.addEventListener('touchcancel', e => {
+    if (gameTouchId === null) return;
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === gameTouchId) {
+            gameTouchId = null;
             isTouching = false;
             touchX = null;
             touchY = null;
+            break;
         }
-    }, { passive: true });
+    }
+ui.touchFireButton.addEventListener('touchstart', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    isFiringTouch = true;
+});
 
-    ui.touchFireButton.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        isFiringTouch = true;
-    });
-    ui.touchFireButton.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        isFiringTouch = false;
-    });
+ui.touchFireButton.addEventListener('touchend', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    isFiringTouch = false;
+});
+
+ui.touchFireButton.addEventListener('touchcancel', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    isFiringTouch = false;
+});
     ui.touchFireButton.addEventListener('mousedown', () => { isFiringTouch = true; });
     ui.touchFireButton.addEventListener('mouseup', () => { isFiringTouch = false; });
     ui.touchFireButton.addEventListener('mouseleave', () => { isFiringTouch = false; });
