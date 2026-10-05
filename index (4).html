@@ -565,7 +565,61 @@
     let fireRateLevel = 1;
     let critLevel = 0;
     let hpUpgradesCount = 0;
+// ===== WEAPON SYSTEM =====
+const MAX_WEAPONS = 3;
+const WEAPON_OFFER_CHANCE = 0.20;
 
+const ownedWeapons = [];
+
+const WEAPON_DEFS = {
+    drill: {
+        name: 'DRILL',
+        icon: '🔩',
+        title: 'DRILL',
+        desc: '機体左右から巨大ドリル弾を2発発射。高火力の直進攻撃。',
+        theme: 'cyan',
+        cooldown: 72
+    },
+
+    electro: {
+        name: 'ELECTRO',
+        icon: '⚡',
+        title: 'ELECTRO',
+        desc: '命中した敵から最大4体へ電撃連鎖。同じ敵には1イベント中1回だけ命中。',
+        theme: 'purple',
+        cooldown: 66
+    },
+
+    wiper: {
+        name: 'WIPER',
+        icon: '🧹',
+        title: 'WIPER',
+        desc: '前方をワイパー状に薙ぎ払い、敵を攻撃しながら敵弾も防ぐ。',
+        theme: 'green',
+        cooldown: 0
+    },
+
+    homing: {
+        name: 'HOMING',
+        icon: '🎯',
+        title: 'HOMING',
+        desc: '敵を自動追尾。飛行途中で2発に分裂してさらに追撃する。',
+        theme: 'orange',
+        cooldown: 70
+    }
+};
+
+const weaponTimers = {
+    drill: 0,
+    electro: 0,
+    homing: 0
+};
+
+let wiperAngle = -0.82;
+let wiperDirection = 1;
+
+const wiperHitTimers = new Map();
+const electricLinks = [];
     const keys = {};
     let isFiringTouch = false;
     let touchX = null;
