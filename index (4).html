@@ -573,7 +573,7 @@ const MAX_WEAPONS = 3;
 const WEAPON_OFFER_CHANCE = 0.20;
 
 const ownedWeapons = [];
-
+const currentUpgradeOptions = [null, null, null, null];
 const WEAPON_DEFS = {
     drill: {
         name: 'DRILL',
@@ -1950,57 +1950,149 @@ const electricLinks = [];
         updateHUD(true);
     }
 
-    function openUpgradeModal() {
-        gameState = STATE_UPGRADE;
+    function buildUpgradeOptions() {
+    const options = ['shot', 'rate', 'crit', 'hp'];
 
-        const btnShot = ui.upgradeButtons.shot;
-        const { badge: badgeShot, status: statusShot } = ui.upgradeLabels.shot;
-        badgeShot.innerText = `LV.${shotPowerLevel}/4`;
-        if (shotPowerLevel >= 4) {
-            btnShot.disabled = true;
-            statusShot.innerText = 'MAX REACHED';
-        } else {
-            btnShot.disabled = false;
-            statusShot.innerText = '選択する';
+    // 武器を3つ未満所持していて、20%の確率に当選したら
+    // 既存4枠のうち1枠を未取得武器に置き換える
+    if (ownedWeapons.length < MAX_WEAPONS && Math.random() < WEAPON_OFFER_CHANCE) {
+        const availableWeapons = Object.keys(WEAPON_DEFS)
+            .filter(id => !ownedWeapons.includes(id));
+
+        if (availableWeapons.length > 0) {
+            const weaponId = availableWeapons[Math.floor(Math.random() * availableWeapons.length)];
+            const replaceIndex = Math.floor(Math.random() * options.length);
+            options[replaceIndex] = `weapon:${weaponId}`;
         }
-
-        const btnRate = ui.upgradeButtons.rate;
-        const { badge: badgeRate, status: statusRate } = ui.upgradeLabels.rate;
-        badgeRate.innerText = `LV.${fireRateLevel}/4`;
-        if (fireRateLevel >= 4) {
-            btnRate.disabled = true;
-            statusRate.innerText = 'MAX REACHED';
-        } else {
-            btnRate.disabled = false;
-            statusRate.innerText = '選択する';
-        }
-
-        const btnCrit = ui.upgradeButtons.crit;
-        const { badge: badgeCrit, status: statusCrit } = ui.upgradeLabels.crit;
-        badgeCrit.innerText = `LV.${critLevel}/5`;
-        if (critLevel >= 5) {
-            btnCrit.disabled = true;
-            statusCrit.innerText = 'MAX REACHED';
-        } else {
-            btnCrit.disabled = false;
-            statusCrit.innerText = '選択する';
-        }
-
-        const { badge: badgeHp, title: titleHp, desc: descHp } = ui.upgradeLabels.hp;
-
-        if (hpUpgradesCount < 3) {
-            titleHp.innerText = '最大HP＆全回復';
-            descHp.innerText = `最大HP+1 ＆ 体力回復 (現在:${player.maxLives})`;
-            badgeHp.innerText = `UP:${hpUpgradesCount}/3`;
-        } else {
-            titleHp.innerText = 'HP全回復';
-            descHp.innerText = `機体を完全修理 (HP:${player.lives}/${player.maxLives})`;
-            badgeHp.innerText = 'UNLIMITED';
-        }
-
-        ui.upgrade.classList.remove('hidden');
     }
 
+    return options;
+}
+
+function configureUpgradeSlot(slotIndex, type) {
+    const slot = ui.upgradeSlots[slotIndex];
+
+    slot.button.disabled = false;
+
+    if (type.startsWith('weapon:')) {
+        const weaponId = type.substring(7);
+        const weapon = WEAPON_DEFS[weaponId];
+
+        slot.icon.innerText = weapon.icon;
+        slot.title.innerText = weapon.title;
+        slot.desc.innerText = weapon.desc;
+        slot.badge.innerText = `WEAPON ${ownedWeapons.length + 1}/${MAX_WEAPONS}`;
+        slot.status.innerText = '取得する';
+
+        return;
+    }
+
+    if (type === 'shot') {
+        slot.icon.innerText = '⚡';
+        slot.title.innerText = '射撃パワー';
+        slot.desc.innerText = '弾数・範囲 ＆ 威力UP';
+        slot.badge.innerText = `LV.${shotPowerLevel}/4`;
+
+        if (shotPowerLevel >= 4) {
+            slot.button.disabled = true;
+            slot.status.innerText = 'MAX REACHED';
+        } else {
+            slot.status.innerText = '選択する';
+        }
+
+    } else if (type === 'rate') {
+        slot.icon.innerText = '🔥';
+        slot.title.innerText = '発射レート';
+        slot.desc.innerText = '連射速度を限界まで高速化';
+        slot.badge.innerText = `LV.${fireRateLevel}/4`;
+
+        if (fireRateLevel >= 4) {
+            slot.button.disabled = true;
+            slot.status.innerText = 'MAX REACHED';
+        } else {
+            slot.status.innerText = '選択する';
+        }
+
+    } else if (type === 'crit') {
+        slot.icon.innerText = '🎯';
+        slot.title.innerText = 'クリティカル';
+        slot.desc.innerText = '会心率+5% (ダメージ2倍)';
+        slot.badge.innerText = `LV.${critLevel}/5`;
+
+        if (critLevel >= 5) {
+            slot.button.disabled = true;
+            slot.status.innerText = 'MAX REACHED';
+        } else {
+            slot.status.innerText = '選択する';
+        }
+
+    } else if (type === 'hp') {
+        slot.icon.innerText = '💖';
+
+        if (hpUpgradesCount < 3) {
+            slot.title.innerText = '最大HP＆全回復';
+            slot.desc.innerText = `最大HP+1 ＆ 体力回復 (現在:${player.maxLives})`;
+            slot.badge.innerText = `UP:${hpUpgradesCount}/3`;
+        } else {
+            slot.title.innerText = 'HP全回復';
+            slot.desc.innerText = `機体を完全修理 (HP:${player.lives}/${player.maxLives})`;
+            slot.badge.innerText = 'UNLIMITED';
+        }
+
+        slot.status.innerText = '選択する';
+    }
+}
+
+function openUpgradeModal() {
+    gameState = STATE_UPGRADE;
+
+    const options = buildUpgradeOptions();
+
+    for (let i = 0; i < ui.upgradeSlots.length; i++) {
+        currentUpgradeOptions[i] = options[i];
+        configureUpgradeSlot(i, options[i]);
+    }
+
+    ui.upgrade.classList.remove('hidden');
+}
+
+function selectUpgradeSlot(slotIndex) {
+    const type = currentUpgradeOptions[slotIndex];
+    if (!type) return;
+
+    if (type.startsWith('weapon:')) {
+        const weaponId = type.substring(7);
+
+        if (
+            WEAPON_DEFS[weaponId] &&
+            ownedWeapons.length < MAX_WEAPONS &&
+            !ownedWeapons.includes(weaponId)
+        ) {
+            ownedWeapons.push(weaponId);
+        }
+    } else if (type === 'shot' && shotPowerLevel < 4) {
+        shotPowerLevel++;
+
+    } else if (type === 'rate' && fireRateLevel < 4) {
+        fireRateLevel++;
+
+    } else if (type === 'crit' && critLevel < 5) {
+        critLevel++;
+
+    } else if (type === 'hp') {
+        if (hpUpgradesCount < 3) {
+            hpUpgradesCount++;
+            player.maxLives++;
+        }
+        player.lives = player.maxLives;
+    }
+
+    sfx.playUpgrade();
+
+    ui.upgrade.classList.add('hidden');
+    updateHUD(true);
+    gameState = STATE_PLAYING;
+}
     function selectUpgrade(type) {
         if (type === 'shot' && shotPowerLevel < 4) {
             shotPowerLevel++;
