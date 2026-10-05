@@ -1978,29 +1978,38 @@
         startGame();
     }
 
-    function startGame() {
-        score = 0;
-        nextUpgradeScore = 4000;
-        bossLevel = 0;
-        gameElapsedMs = 0;
-        formationSpawnTimer = 0;
-        formationDirection = -1;
-        lastFrameTime = performance.now();
-        isBossActive = false;
-        boss = null;
-        
-        shotPowerLevel = 1;
-        fireRateLevel = 1;
-        critLevel = 0;
-        hpUpgradesCount = 0;
+function startGame() {
+    score = 0;
+    nextUpgradeScore = 4000;
 
-        [playerBulletPool, enemyBulletPool, particlePool, damageTextPool].forEach(pool => {
-            for (let i = 0; i < pool.length; i++) pool[i].active = false;
-        });
+    bossLevel = 0;
+    gameElapsedMs = 0;
+    formationSpawnTimer = 0;
+    enemySpawnTimer = 0;
+    formationDirection = -1;
 
-        enemies.length = 0;
-        player.reset();
-        player.shipType = selectedShipType;
+    lastFrameTime = performance.now();
+
+    isBossActive = false;
+    bossWarningTimer = 0;
+    stageUpTimer = 0;
+    boss = null;
+
+    shotPowerLevel = 1;
+    fireRateLevel = 1;
+    critLevel = 0;
+    hpUpgradesCount = 0;
+
+    [playerBulletPool, enemyBulletPool, particlePool, damageTextPool].forEach(pool => {
+        for (let i = 0; i < pool.length; i++) {
+            pool[i].active = false;
+        }
+    });
+
+    enemies.length = 0;
+
+    player.reset();
+    player.shipType = selectedShipType;
         
         updateHUD();
         
