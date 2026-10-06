@@ -2011,10 +2011,11 @@ const electricLinks = [];
         bossLevel++;
         stageUpTimer = 150;
         sfx.playUpgrade();
-      　nextUpgradeScore = Math.min(
-    nextUpgradeScore + 2000,
-    20000
-);
+      　if (nextUpgradeScore < 20000) {
+    nextUpgradeScore += 2000;
+} else {
+    nextUpgradeScore += 20000;
+}
         ui.stageBanner.classList.remove('hidden');
         updateHUD(true);
     }
@@ -2158,10 +2159,6 @@ function selectUpgradeSlot(slotIndex) {
 
     sfx.playUpgrade();
 
-nextUpgradeScore = Math.min(
-    nextUpgradeScore + 2000,
-    20000
-);
 
 ui.upgrade.classList.add('hidden');
 updateHUD(true);
