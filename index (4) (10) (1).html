@@ -2441,9 +2441,12 @@ function startGame() {
 
         // ボス戦中（登場演出・戦闘中）はアップグレード画面を出さない。
         // スコア条件を満たしていても nextUpgradeScore は進めず、ボス撃破後にまとめて判定する。
-       if (!isBossActive && !boss && score >= nextUpgradeScore) {
-          openUpgradeModal();
-          return;
+      if (!isBossActive && !boss && score >= nextUpgradeScore) {
+    while (nextUpgradeScore <= score) {
+        nextUpgradeScore += 4000;
+    }
+    openUpgradeModal();
+    return;
 }
 
         // Bosses appear every 60 seconds of active gameplay.
