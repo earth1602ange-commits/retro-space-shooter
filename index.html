@@ -216,45 +216,45 @@
             <p class="text-[10px] md:text-xs text-cyan-300 mb-4">スコア報酬：強化モジュールを選択してください</p>
 
             <div class="grid grid-cols-2 md:grid-cols-2 gap-3 w-full max-w-lg px-2">
-                <button id="btn-upg-shot" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-cyan-400 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-cyan-500/20 disabled:opacity-40 disabled:pointer-events-none">
-                    <div class="w-full flex justify-between items-center mb-1">
-                        <span class="text-xl">⚡</span>
-                        <span id="badge-shot" class="text-[9px] bg-cyan-950 text-cyan-300 border border-cyan-500 px-1.5 py-0.5 rounded">LV.1/4</span>
-                    </div>
-                    <div class="w-full text-cyan-400 font-bold text-xs mb-0.5">射撃パワー</div>
-                    <div class="w-full text-slate-300 text-[9px] leading-tight mb-2">弾数・範囲 ＆ 威力UP</div>
-                    <div id="status-shot" class="w-full text-center text-[10px] text-cyan-300 group-hover:text-white font-bold py-1 bg-cyan-900/60 rounded">選択する</div>
-                </button>
+                <button id="btn-upg-0" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-cyan-400 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-cyan-500/20 disabled:opacity-40 disabled:pointer-events-none">
+    <div class="w-full flex justify-between items-center mb-1">
+        <span id="upgrade-icon-0" class="text-xl">⚡</span>
+        <span id="badge-upg-0" class="text-[9px] bg-cyan-950 text-cyan-300 border border-cyan-500 px-1.5 py-0.5 rounded">LV.1/4</span>
+    </div>
+    <div id="title-upg-0" class="w-full text-cyan-400 font-bold text-xs mb-0.5">射撃パワー</div>
+    <div id="desc-upg-0" class="w-full text-slate-300 text-[9px] leading-tight mb-2">弾数・範囲 ＆ 威力UP</div>
+    <div id="status-upg-0" class="w-full text-center text-[10px] text-cyan-300 group-hover:text-white font-bold py-1 bg-cyan-900/60 rounded">選択する</div>
+</button>
 
-                <button id="btn-upg-rate" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-pink-500 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-pink-500/20 disabled:opacity-40 disabled:pointer-events-none">
-                    <div class="w-full flex justify-between items-center mb-1">
-                        <span class="text-xl">🔥</span>
-                        <span id="badge-rate" class="text-[9px] bg-pink-950 text-pink-300 border border-pink-500 px-1.5 py-0.5 rounded">LV.1/4</span>
-                    </div>
-                    <div class="w-full text-pink-400 font-bold text-xs mb-0.5">発射レート</div>
-                    <div class="w-full text-slate-300 text-[9px] leading-tight mb-2">連射速度を限界まで高速化</div>
-                    <div id="status-rate" class="w-full text-center text-[10px] text-pink-300 group-hover:text-white font-bold py-1 bg-pink-900/60 rounded">選択する</div>
-                </button>
+<button id="btn-upg-1" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-pink-500 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-pink-500/20 disabled:opacity-40 disabled:pointer-events-none">
+    <div class="w-full flex justify-between items-center mb-1">
+        <span id="upgrade-icon-1" class="text-xl">🔥</span>
+        <span id="badge-upg-1" class="text-[9px] bg-pink-950 text-pink-300 border border-pink-500 px-1.5 py-0.5 rounded">LV.1/4</span>
+    </div>
+    <div id="title-upg-1" class="w-full text-pink-400 font-bold text-xs mb-0.5">発射レート</div>
+    <div id="desc-upg-1" class="w-full text-slate-300 text-[9px] leading-tight mb-2">連射速度を限界まで高速化</div>
+    <div id="status-upg-1" class="w-full text-center text-[10px] text-pink-300 group-hover:text-white font-bold py-1 bg-pink-900/60 rounded">選択する</div>
+</button>
 
-                <button id="btn-upg-crit" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-yellow-400 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-yellow-500/20 disabled:opacity-40 disabled:pointer-events-none">
-                    <div class="w-full flex justify-between items-center mb-1">
-                        <span class="text-xl">🎯</span>
-                        <span id="badge-crit" class="text-[9px] bg-yellow-950 text-yellow-300 border border-yellow-500 px-1.5 py-0.5 rounded">LV.0/5</span>
-                    </div>
-                    <div class="w-full text-yellow-400 font-bold text-xs mb-0.5">クリティカル</div>
-                    <div class="w-full text-slate-300 text-[9px] leading-tight mb-2">会心率+5% (ダメージ2倍)</div>
-                    <div id="status-crit" class="w-full text-center text-[10px] text-yellow-300 group-hover:text-white font-bold py-1 bg-yellow-900/60 rounded">選択する</div>
-                </button>
+<button id="btn-upg-2" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-yellow-400 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-yellow-500/20 disabled:opacity-40 disabled:pointer-events-none">
+    <div class="w-full flex justify-between items-center mb-1">
+        <span id="upgrade-icon-2" class="text-xl">🎯</span>
+        <span id="badge-upg-2" class="text-[9px] bg-yellow-950 text-yellow-300 border border-yellow-500 px-1.5 py-0.5 rounded">LV.0/5</span>
+    </div>
+    <div id="title-upg-2" class="w-full text-yellow-400 font-bold text-xs mb-0.5">クリティカル</div>
+    <div id="desc-upg-2" class="w-full text-slate-300 text-[9px] leading-tight mb-2">会心率+5% (ダメージ2倍)</div>
+    <div id="status-upg-2" class="w-full text-center text-[10px] text-yellow-300 group-hover:text-white font-bold py-1 bg-yellow-900/60 rounded">選択する</div>
+</button>
 
-                <button id="btn-upg-hp" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-green-400 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-green-500/20">
-                    <div class="w-full flex justify-between items-center mb-1">
-                        <span class="text-xl">💖</span>
-                        <span id="badge-hp" class="text-[9px] bg-green-950 text-green-300 border border-green-500 px-1.5 py-0.5 rounded">UP:0/3</span>
-                    </div>
-                    <div id="title-hp" class="w-full text-green-400 font-bold text-xs mb-0.5">最大HP＆全回復</div>
-                    <div id="desc-hp" class="w-full text-slate-300 text-[9px] leading-tight mb-2">最大HP+1 ＆ 体力完全回復</div>
-                    <div class="w-full text-center text-[10px] text-green-300 group-hover:text-white font-bold py-1 bg-green-900/60 rounded">選択する</div>
-                </button>
+<button id="btn-upg-3" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-green-400 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-green-500/20">
+    <div class="w-full flex justify-between items-center mb-1">
+        <span id="upgrade-icon-3" class="text-xl">💖</span>
+        <span id="badge-upg-3" class="text-[9px] bg-green-950 text-green-300 border border-green-500 px-1.5 py-0.5 rounded">UP:0/3</span>
+    </div>
+    <div id="title-upg-3" class="w-full text-green-400 font-bold text-xs mb-0.5">最大HP＆全回復</div>
+    <div id="desc-upg-3" class="w-full text-slate-300 text-[9px] leading-tight mb-2">最大HP+1 ＆ 体力完全回復</div>
+    <div id="status-upg-3" class="w-full text-center text-[10px] text-green-300 group-hover:text-white font-bold py-1 bg-green-900/60 rounded">選択する</div>
+</button>
             </div>
         </div>
 
@@ -488,18 +488,21 @@
         rankingCloseButton: document.getElementById('btn-ranking-close'),
 
         // Upgrade controls
-        upgradeButtons: {
-            shot: document.getElementById('btn-upg-shot'),
-            rate: document.getElementById('btn-upg-rate'),
-            crit: document.getElementById('btn-upg-crit'),
-            hp: document.getElementById('btn-upg-hp')
-        },
-        upgradeLabels: {
-            shot: { badge: document.getElementById('badge-shot'), status: document.getElementById('status-shot') },
-            rate: { badge: document.getElementById('badge-rate'), status: document.getElementById('status-rate') },
-            crit: { badge: document.getElementById('badge-crit'), status: document.getElementById('status-crit') },
-            hp: { badge: document.getElementById('badge-hp'), title: document.getElementById('title-hp'), desc: document.getElementById('desc-hp') }
-        },
+upgradeSlots: [0, 1, 2, 3].map(index => ({
+    button: document.getElementById(`btn-upg-${index}`),
+    icon: document.getElementById(`upgrade-icon-${index}`),
+    badge: document.getElementById(`badge-upg-${index}`),
+    title: document.getElementById(`title-upg-${index}`),
+    desc: document.getElementById(`desc-upg-${index}`),
+    status: document.getElementById(`status-upg-${index}`)
+})),
+
+upgradeButtons: {
+    shot: document.getElementById('btn-upg-0'),
+    rate: document.getElementById('btn-upg-1'),
+    crit: document.getElementById('btn-upg-2'),
+    hp: document.getElementById('btn-upg-3')
+},
         startButton: document.getElementById('btn-start'),
         restartButton: document.getElementById('btn-restart'),
         titleButton: document.getElementById('btn-title'),
@@ -565,7 +568,66 @@
     let fireRateLevel = 1;
     let critLevel = 0;
     let hpUpgradesCount = 0;
+// ===== WEAPON SYSTEM =====
+const MAX_WEAPONS = 3;
+const WEAPON_OFFER_CHANCE = 0.40;
 
+const ownedWeapons = [];
+const currentUpgradeOptions = [null, null, null, null];
+const WEAPON_DEFS = {
+    drill: {
+        name: 'DRILL',
+        icon: '🔩',
+        title: 'DRILL',
+        desc: '機体左右から巨大ドリル弾を2発発射。高火力の直進攻撃。',
+        theme: 'cyan',
+        cooldown: 72
+    },
+
+    electro: {
+        name: 'ELECTRO',
+        icon: '⚡',
+        title: 'ELECTRO',
+        desc: '命中した敵から最大4体へ電撃連鎖。同じ敵には1イベント中1回だけ命中。',
+        theme: 'purple',
+        cooldown: 66
+    },
+
+    wiper: {
+        name: 'WIPER',
+        icon: '🧹',
+        title: 'WIPER',
+        desc: '前方をワイパー状に薙ぎ払い、敵を攻撃しながら敵弾も防ぐ。',
+        theme: 'green',
+        cooldown: 0
+    },
+
+    homing: {
+        name: 'HOMING',
+        icon: '🎯',
+        title: 'HOMING',
+        desc: '敵を自動追尾。飛行途中で2発に分裂してさらに追撃する。',
+        theme: 'orange',
+        cooldown: 70
+    }
+};
+
+const weaponTimers = {
+    drill: 0,
+    electro: 0,
+    homing: 0
+};
+
+// WIPER tuning: 左から右へ一定速度で動く縦棒
+const WIPER_REACH = 37.5;
+const WIPER_X_MIN = -70;
+const WIPER_X_MAX = 70;
+const WIPER_SPEED = 7.5;
+
+let wiperX = WIPER_X_MIN;
+
+const wiperHitTimers = new Map();
+const electricLinks = [];
     const keys = {};
     let isFiringTouch = false;
     let touchX = null;
@@ -612,6 +674,8 @@
             this.critChanceMultiplier = critChanceMultiplier;
             this.critDamageMultiplier = critDamageMultiplier;
             this.canGuard = false;
+            this.splitWeapon = false;
+            this.homingFast = false;
             this.hitSet.clear();
         }
 
@@ -653,12 +717,15 @@
 
                 if (target) {
                     let angle = Math.atan2(target.y - this.y, target.x - this.x);
-                    this.vx += Math.cos(angle) * 1.2;
-                    this.vy += Math.sin(angle) * 1.2;
+                    // 分裂前はゆっくり、分裂後は高速で追尾
+                    const homingAccel = this.isSplit ? 0.45 : 0.45;
+                    const maxHomingSpeed = this.homingFast ? 8.8 : 4.2;
+                    this.vx += Math.cos(angle) * homingAccel;
+                    this.vy += Math.sin(angle) * homingAccel;
                     let speed = Math.hypot(this.vx, this.vy);
-                    if (speed > 10.0) {
-                        this.vx = (this.vx / speed) * 10.0;
-                        this.vy = (this.vy / speed) * 10.0;
+                    if (speed > maxHomingSpeed) {
+                        this.vx = (this.vx / speed) * maxHomingSpeed;
+                        this.vy = (this.vy / speed) * maxHomingSpeed;
                     }
                 }
             }
@@ -679,18 +746,41 @@
                 this.splitTimer--;
                 if (this.splitTimer <= 0) {
                     this.active = false;
-                    const numSplits = 6;
-                    for (let i = 0; i < numSplits; i++) {
-                        const angle = (Math.PI * 2 / numSplits) * i;
-                        const speed = 4;
-                        spawnFromPool(enemyBulletPool, b => b.spawn(
-                            this.x, this.y,
-                            Math.cos(angle) * speed,
-                            Math.sin(angle) * speed,
-                            '#ff00aa', 3, false, 0
-                        ));
+
+                    if (this.type === 'homing' && this.splitWeapon) {
+                        // HOMING武器：途中で2発に分裂。分裂弾も敵を追尾する。
+                        const baseAngle = Math.atan2(this.vy, this.vx);
+                        const splitAngle = 0.42;
+                        const speed = 8.8;
+                        for (const angle of [baseAngle - splitAngle, baseAngle + splitAngle]) {
+                            spawnFromPool(playerBulletPool, b => {
+                                b.spawn(
+                                    this.x, this.y,
+                                    Math.cos(angle) * speed,
+                                    Math.sin(angle) * speed,
+                                    '#ffb347', 5, false, 0,
+                                    'homing', 100, 10, 10,
+                                    1, 1
+                                );
+                                b.splitWeapon = false;
+                                b.homingFast = true;
+                            });
+                        }
+                        createExplosion(this.x, this.y, '#ffb347', 8);
+                    } else {
+                        const numSplits = 6;
+                        for (let i = 0; i < numSplits; i++) {
+                            const angle = (Math.PI * 2 / numSplits) * i;
+                            const speed = 4;
+                            spawnFromPool(enemyBulletPool, b => b.spawn(
+                                this.x, this.y,
+                                Math.cos(angle) * speed,
+                                Math.sin(angle) * speed,
+                                '#ff00aa', 3, false, 0
+                            ));
+                        }
+                        createExplosion(this.x, this.y, '#ff00aa', 8);
                     }
-                    createExplosion(this.x, this.y, '#ff00aa', 8);
                 }
             }
 
@@ -719,6 +809,31 @@
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
+                ctx.restore();
+            } else if (this.type === 'drill') {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 8;
+
+                // 縦長の大型ドリル弾
+                ctx.beginPath();
+                ctx.moveTo(0, -this.height / 2);
+                ctx.lineTo(this.width / 2, this.height * 0.18);
+                ctx.lineTo(this.width * 0.18, this.height * 0.12);
+                ctx.lineTo(this.width * 0.30, this.height / 2);
+                ctx.lineTo(0, this.height * 0.25);
+                ctx.lineTo(-this.width * 0.30, this.height / 2);
+                ctx.lineTo(-this.width * 0.18, this.height * 0.12);
+                ctx.lineTo(-this.width / 2, this.height * 0.18);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
                 ctx.restore();
             } else if (this.type === 'homing') {
                 ctx.fillStyle = this.color;
@@ -1893,57 +2008,149 @@
         updateHUD(true);
     }
 
-    function openUpgradeModal() {
-        gameState = STATE_UPGRADE;
+    function buildUpgradeOptions() {
+    const options = ['shot', 'rate', 'crit', 'hp'];
 
-        const btnShot = ui.upgradeButtons.shot;
-        const { badge: badgeShot, status: statusShot } = ui.upgradeLabels.shot;
-        badgeShot.innerText = `LV.${shotPowerLevel}/4`;
-        if (shotPowerLevel >= 4) {
-            btnShot.disabled = true;
-            statusShot.innerText = 'MAX REACHED';
-        } else {
-            btnShot.disabled = false;
-            statusShot.innerText = '選択する';
+    // 武器を3つ未満所持していて、40%の確率に当選したら
+    // 既存4枠のうち1枠を未取得武器に置き換える
+    if (ownedWeapons.length < MAX_WEAPONS && Math.random() < WEAPON_OFFER_CHANCE) {
+        const availableWeapons = Object.keys(WEAPON_DEFS)
+            .filter(id => !ownedWeapons.includes(id));
+
+        if (availableWeapons.length > 0) {
+            const weaponId = availableWeapons[Math.floor(Math.random() * availableWeapons.length)];
+            const replaceIndex = Math.floor(Math.random() * options.length);
+            options[replaceIndex] = `weapon:${weaponId}`;
         }
-
-        const btnRate = ui.upgradeButtons.rate;
-        const { badge: badgeRate, status: statusRate } = ui.upgradeLabels.rate;
-        badgeRate.innerText = `LV.${fireRateLevel}/4`;
-        if (fireRateLevel >= 4) {
-            btnRate.disabled = true;
-            statusRate.innerText = 'MAX REACHED';
-        } else {
-            btnRate.disabled = false;
-            statusRate.innerText = '選択する';
-        }
-
-        const btnCrit = ui.upgradeButtons.crit;
-        const { badge: badgeCrit, status: statusCrit } = ui.upgradeLabels.crit;
-        badgeCrit.innerText = `LV.${critLevel}/5`;
-        if (critLevel >= 5) {
-            btnCrit.disabled = true;
-            statusCrit.innerText = 'MAX REACHED';
-        } else {
-            btnCrit.disabled = false;
-            statusCrit.innerText = '選択する';
-        }
-
-        const { badge: badgeHp, title: titleHp, desc: descHp } = ui.upgradeLabels.hp;
-
-        if (hpUpgradesCount < 3) {
-            titleHp.innerText = '最大HP＆全回復';
-            descHp.innerText = `最大HP+1 ＆ 体力回復 (現在:${player.maxLives})`;
-            badgeHp.innerText = `UP:${hpUpgradesCount}/3`;
-        } else {
-            titleHp.innerText = 'HP全回復';
-            descHp.innerText = `機体を完全修理 (HP:${player.lives}/${player.maxLives})`;
-            badgeHp.innerText = 'UNLIMITED';
-        }
-
-        ui.upgrade.classList.remove('hidden');
     }
 
+    return options;
+}
+
+function configureUpgradeSlot(slotIndex, type) {
+    const slot = ui.upgradeSlots[slotIndex];
+
+    slot.button.disabled = false;
+
+    if (type.startsWith('weapon:')) {
+        const weaponId = type.substring(7);
+        const weapon = WEAPON_DEFS[weaponId];
+
+        slot.icon.innerText = weapon.icon;
+        slot.title.innerText = weapon.title;
+        slot.desc.innerText = weapon.desc;
+        slot.badge.innerText = `WEAPON ${ownedWeapons.length + 1}/${MAX_WEAPONS}`;
+        slot.status.innerText = '取得する';
+
+        return;
+    }
+
+    if (type === 'shot') {
+        slot.icon.innerText = '⚡';
+        slot.title.innerText = '射撃パワー';
+        slot.desc.innerText = '弾数・範囲 ＆ 威力UP';
+        slot.badge.innerText = `LV.${shotPowerLevel}/4`;
+
+        if (shotPowerLevel >= 4) {
+            slot.button.disabled = true;
+            slot.status.innerText = 'MAX REACHED';
+        } else {
+            slot.status.innerText = '選択する';
+        }
+
+    } else if (type === 'rate') {
+        slot.icon.innerText = '🔥';
+        slot.title.innerText = '発射レート';
+        slot.desc.innerText = '連射速度を限界まで高速化';
+        slot.badge.innerText = `LV.${fireRateLevel}/4`;
+
+        if (fireRateLevel >= 4) {
+            slot.button.disabled = true;
+            slot.status.innerText = 'MAX REACHED';
+        } else {
+            slot.status.innerText = '選択する';
+        }
+
+    } else if (type === 'crit') {
+        slot.icon.innerText = '🎯';
+        slot.title.innerText = 'クリティカル';
+        slot.desc.innerText = '会心率+5% (ダメージ2倍)';
+        slot.badge.innerText = `LV.${critLevel}/5`;
+
+        if (critLevel >= 5) {
+            slot.button.disabled = true;
+            slot.status.innerText = 'MAX REACHED';
+        } else {
+            slot.status.innerText = '選択する';
+        }
+
+    } else if (type === 'hp') {
+        slot.icon.innerText = '💖';
+
+        if (hpUpgradesCount < 3) {
+            slot.title.innerText = '最大HP＆全回復';
+            slot.desc.innerText = `最大HP+1 ＆ 体力回復 (現在:${player.maxLives})`;
+            slot.badge.innerText = `UP:${hpUpgradesCount}/3`;
+        } else {
+            slot.title.innerText = 'HP全回復';
+            slot.desc.innerText = `機体を完全修理 (HP:${player.lives}/${player.maxLives})`;
+            slot.badge.innerText = 'UNLIMITED';
+        }
+
+        slot.status.innerText = '選択する';
+    }
+}
+
+function openUpgradeModal() {
+    gameState = STATE_UPGRADE;
+
+    const options = buildUpgradeOptions();
+
+    for (let i = 0; i < ui.upgradeSlots.length; i++) {
+        currentUpgradeOptions[i] = options[i];
+        configureUpgradeSlot(i, options[i]);
+    }
+
+    ui.upgrade.classList.remove('hidden');
+}
+
+function selectUpgradeSlot(slotIndex) {
+    const type = currentUpgradeOptions[slotIndex];
+    if (!type) return;
+
+    if (type.startsWith('weapon:')) {
+        const weaponId = type.substring(7);
+
+        if (
+            WEAPON_DEFS[weaponId] &&
+            ownedWeapons.length < MAX_WEAPONS &&
+            !ownedWeapons.includes(weaponId)
+        ) {
+            ownedWeapons.push(weaponId);
+        }
+    } else if (type === 'shot' && shotPowerLevel < 4) {
+        shotPowerLevel++;
+
+    } else if (type === 'rate' && fireRateLevel < 4) {
+        fireRateLevel++;
+
+    } else if (type === 'crit' && critLevel < 5) {
+        critLevel++;
+
+    } else if (type === 'hp') {
+        if (hpUpgradesCount < 3) {
+            hpUpgradesCount++;
+            player.maxLives++;
+        }
+        player.lives = player.maxLives;
+    }
+
+    sfx.playUpgrade();
+
+    ui.upgrade.classList.add('hidden');
+    updateHUD(true);
+    gameState = STATE_PLAYING;
+}
     function selectUpgrade(type) {
         if (type === 'shot' && shotPowerLevel < 4) {
             shotPowerLevel++;
@@ -1999,6 +2206,16 @@ function startGame() {
     fireRateLevel = 1;
     critLevel = 0;
     hpUpgradesCount = 0;
+
+    ownedWeapons.length = 0;
+    weaponTimers.drill = 0;
+            weaponTimers.electro = 0;
+            weaponTimers.homing = 0;
+            wiperX = WIPER_X_MIN;
+    weaponTimers.electro = 0;
+    weaponTimers.homing = 0;
+    electricLinks.length = 0;
+    wiperHitTimers.clear();
 
     [playerBulletPool, enemyBulletPool, particlePool, damageTextPool].forEach(pool => {
         for (let i = 0; i < pool.length; i++) {
@@ -2141,7 +2358,7 @@ function startGame() {
             const bullet = playerBulletPool[i];
             if (!bullet.active) continue;
 
-            const isPierce = (bullet.type === 'blade');
+            const isPierce = (bullet.type === 'blade' || bullet.type === 'drill');
 
             for (let j = 0; j < enemies.length; j++) {
                 const enemy = enemies[j];
@@ -2149,8 +2366,8 @@ function startGame() {
 
                 if (isPierce && bullet.hitSet.has(enemy)) continue;
 
-                const bx = (bullet.type === 'blade') ? bullet.width : bullet.radius * 2;
-                const by = (bullet.type === 'blade') ? bullet.height : bullet.radius * 2;
+                const bx = (bullet.type === 'blade' || bullet.type === 'drill') ? bullet.width : bullet.radius * 2;
+                const by = (bullet.type === 'blade' || bullet.type === 'drill') ? bullet.height : bullet.radius * 2;
 
                 if (bullet.x + bx / 2 > enemy.x && bullet.x - bx / 2 < enemy.x + enemy.width &&
                     bullet.y + by / 2 > enemy.y && bullet.y - by / 2 < enemy.y + enemy.height) {
@@ -2160,7 +2377,7 @@ function startGame() {
 
                     const critChance = Math.min(1, critLevel * 0.05 * (bullet.critChanceMultiplier || 1));
                     const isCrit = Math.random() < critChance;
-                    const baseDamage = shotPowerLevel;
+                    const baseDamage = bullet.type === 'drill' ? shotPowerLevel * 3 : shotPowerLevel;
                     const damage = isCrit ? baseDamage * 2 * (bullet.critDamageMultiplier || 1) : baseDamage;
                     const dmgColor = isCrit ? '#ff0055' : '#ffff00';
 
@@ -2189,8 +2406,8 @@ function startGame() {
 
                     const partX = boss.x + part.relX - part.width / 2;
                     const partY = boss.y + part.relY - part.height / 2;
-                    const bx = (bullet.type === 'blade') ? bullet.width : bullet.radius * 2;
-                    const by = (bullet.type === 'blade') ? bullet.height : bullet.radius * 2;
+                    const bx = (bullet.type === 'blade' || bullet.type === 'drill') ? bullet.width : bullet.radius * 2;
+                    const by = (bullet.type === 'blade' || bullet.type === 'drill') ? bullet.height : bullet.radius * 2;
 
                     if (bullet.x + bx / 2 > partX && bullet.x - bx / 2 < partX + part.width &&
                         bullet.y + by / 2 > partY && bullet.y - by / 2 < partY + part.height) {
@@ -2200,7 +2417,7 @@ function startGame() {
 
                         const critChance = Math.min(1, critLevel * 0.05 * (bullet.critChanceMultiplier || 1));
                         const isCrit = Math.random() < critChance;
-                        const baseDamage = shotPowerLevel;
+                        const baseDamage = bullet.type === 'drill' ? shotPowerLevel * 3 : shotPowerLevel;
                         const damage = isCrit ? baseDamage * 2 * (bullet.critDamageMultiplier || 1) : baseDamage;
                         const dmgColor = isCrit ? '#ff0055' : '#ffff00';
 
@@ -2264,6 +2481,188 @@ function startGame() {
         enemies.length = writeIdx;
     }
 
+    function updateWeapons() {
+        // DRILL: 自機左右から大型ドリル弾を2発、自動発射
+        if (ownedWeapons.includes('drill')) {
+            if (weaponTimers.drill > 0) {
+                weaponTimers.drill--;
+            } else {
+                const cx = player.x + player.width * 0.5;
+                const y = player.y + 4;
+
+                const fireDrill = (x) => {
+                    spawnFromPool(playerBulletPool, b => {
+                        b.spawn(x, y, 0, -9, '#00f0ff', 10, false, 0, 'drill', 120, 22, 38, 1, 1);
+                    });
+                };
+
+                fireDrill(cx - 15);
+                fireDrill(cx + 15);
+                weaponTimers.drill = WEAPON_DEFS.drill.cooldown;
+            }
+        }
+
+        // ELECTRO: 最寄りの敵から最大4体へ一度だけ連鎖。
+        // electricLinksには今回の1イベントの命中済み敵を記録し、A→B→Aを防ぐ。
+        if (ownedWeapons.includes('electro')) {
+            if (weaponTimers.electro > 0) {
+                weaponTimers.electro--;
+            } else {
+                const aliveEnemies = enemies.filter(e => e.active);
+                if (aliveEnemies.length > 0) {
+                    const cx = player.x + player.width * 0.5;
+                    const cy = player.y + player.height * 0.5;
+                    aliveEnemies.sort((a, b) => {
+                        const adx = a.x + a.width * 0.5 - cx;
+                        const ady = a.y + a.height * 0.5 - cy;
+                        const bdx = b.x + b.width * 0.5 - cx;
+                        const bdy = b.y + b.height * 0.5 - cy;
+                        return adx * adx + ady * ady - (bdx * bdx + bdy * bdy);
+                    });
+
+                    const chain = [];
+                    const maxChain = 4;
+                    const first = aliveEnemies[0];
+                    chain.push(first);
+
+                    while (chain.length < maxChain) {
+                        const last = chain[chain.length - 1];
+                        const lx = last.x + last.width * 0.5;
+                        const ly = last.y + last.height * 0.5;
+                        let best = null;
+                        let bestD2 = 150 * 150;
+
+                        for (const candidate of aliveEnemies) {
+                            if (!candidate.active || chain.includes(candidate)) continue;
+                            const dx = candidate.x + candidate.width * 0.5 - lx;
+                            const dy = candidate.y + candidate.height * 0.5 - ly;
+                            const d2 = dx * dx + dy * dy;
+                            if (d2 < bestD2) {
+                                bestD2 = d2;
+                                best = candidate;
+                            }
+                        }
+                        if (!best) break;
+                        chain.push(best);
+                    }
+
+                    electricLinks.length = 0;
+                    for (let i = 0; i < chain.length; i++) {
+                        const enemy = chain[i];
+                        if (!enemy.active) continue;
+                        enemy.hp -= shotPowerLevel * 1.5;
+                        createDamageText(enemy.x + enemy.width * 0.5, enemy.y, Math.round(shotPowerLevel * 1.5), '#c084fc', false);
+                        createExplosion(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.5, '#a855f7', 5);
+
+                        if (enemy.hp <= 0) {
+                            enemy.active = false;
+                            score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                            sfx.playExplosion(false);
+                            createExplosion(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.5, enemy.color, 12);
+                        }
+
+                        if (i > 0) {
+                            const prev = chain[i - 1];
+                            electricLinks.push({
+                                x1: prev.x + prev.width * 0.5,
+                                y1: prev.y + prev.height * 0.5,
+                                x2: enemy.x + enemy.width * 0.5,
+                                y2: enemy.y + enemy.height * 0.5,
+                                life: 10
+                            });
+                        }
+                    }
+                    electricLinks.unshift({
+                        x1: cx, y1: cy,
+                        x2: first.x + first.width * 0.5,
+                        y2: first.y + first.height * 0.5,
+                        life: 10
+                    });
+                    weaponTimers.electro = WEAPON_DEFS.electro.cooldown;
+                }
+            }
+        }
+
+        // WIPER: 左から右へ一定速度で移動する縦棒
+        if (ownedWeapons.includes('wiper')) {
+            wiperX += WIPER_SPEED;
+            if (wiperX > WIPER_X_MAX) {
+                wiperX = WIPER_X_MIN;
+            }
+
+            const cx = player.x + player.width * 0.5;
+            const cy = player.y + player.height * 0.5;
+            const barX = cx + wiperX;
+            const topY = player.y - WIPER_REACH;
+            const bottomY = player.y + 4;
+
+            for (const enemy of enemies) {
+                if (!enemy.active) continue;
+
+                const ex = enemy.x + enemy.width * 0.5;
+                const ey = enemy.y + enemy.height * 0.5;
+
+                if (
+                    Math.abs(ex - barX) <= enemy.width * 0.5 + 6 &&
+                    ey >= topY - enemy.height * 0.5 &&
+                    ey <= bottomY + enemy.height * 0.5
+                ) {
+                    const last = wiperHitTimers.get(enemy) || 0;
+                    if (last <= 0) {
+                        const dmg = Math.max(1, Math.round(shotPowerLevel * 0.7));
+                        enemy.hp -= dmg;
+                        wiperHitTimers.set(enemy, 8);
+                        createDamageText(ex, ey, dmg, '#86efac', false);
+
+                        if (enemy.hp <= 0) {
+                            enemy.active = false;
+                            score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                            createExplosion(ex, ey, enemy.color, 10);
+                        }
+                    }
+                }
+            }
+
+            for (const eb of enemyBulletPool) {
+                if (!eb.active) continue;
+
+                if (
+                    eb.x + eb.radius >= barX - 6 &&
+                    eb.x - eb.radius <= barX + 6 &&
+                    eb.y + eb.radius >= topY &&
+                    eb.y - eb.radius <= bottomY
+                ) {
+                    eb.active = false;
+                }
+            }
+
+            for (const [enemy, timer] of wiperHitTimers) {
+                if (!enemy.active || timer <= 1) wiperHitTimers.delete(enemy);
+                else wiperHitTimers.set(enemy, timer - 1);
+            }
+        }
+
+        // HOMING: 自動追尾弾を発射し、途中で2発へ分裂。
+        if (ownedWeapons.includes('homing')) {
+            if (weaponTimers.homing > 0) {
+                weaponTimers.homing--;
+            } else {
+                const cx = player.x + player.width * 0.5;
+                spawnFromPool(playerBulletPool, b => {
+                    b.spawn(cx, player.y, 0, -7.2, '#ffb347', 5, true, 32, 'homing', 120, 10, 10, 1, 1);
+                    b.splitWeapon = true;
+                });
+                weaponTimers.homing = WEAPON_DEFS.homing.cooldown;
+            }
+        }
+
+        // 電撃の表示を少しずつ消す。
+        for (let i = electricLinks.length - 1; i >= 0; i--) {
+            electricLinks[i].life--;
+            if (electricLinks[i].life <= 0) electricLinks.splice(i, 1);
+        }
+    }
+
     function update() {
         const now = performance.now();
         const deltaMs = Math.min(100, Math.max(0, now - lastFrameTime));
@@ -2319,6 +2718,7 @@ function startGame() {
         }
 
         player.update();
+      　updateWeapons();
 
         if (!isBossActive && !boss) {
             enemySpawnTimer++;
@@ -2370,6 +2770,44 @@ function startGame() {
         for (let i = 0; i < enemyBulletPool.length; i++) if (enemyBulletPool[i].active) enemyBulletPool[i].draw();
         for (let i = 0; i < enemies.length; i++) if (enemies[i].active) enemies[i].draw();
         if (boss) boss.draw();
+
+        // WIPER visual: 縦棒だけを左 -> 右へ移動
+        if (gameState === STATE_PLAYING && ownedWeapons.includes('wiper')) {
+            const cx = player.x + player.width * 0.5;
+            const cy = player.y + player.height * 0.5;
+            const barX = cx + wiperX;
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(134,239,172,0.9)';
+            ctx.shadowColor = '#22c55e';
+            ctx.shadowBlur = 8;
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(barX, player.y - WIPER_REACH);
+            ctx.lineTo(barX, player.y + 4);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // ELECTRO visual
+        if (electricLinks.length) {
+            ctx.save();
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#a855f7';
+            ctx.shadowBlur = 10;
+            for (const link of electricLinks) {
+                const jitter = () => (Math.random() - 0.5) * 8;
+                ctx.strokeStyle = link.life > 5 ? '#e9d5ff' : '#a855f7';
+                ctx.beginPath();
+                ctx.moveTo(link.x1, link.y1);
+                const mx = (link.x1 + link.x2) * 0.5 + jitter();
+                const my = (link.y1 + link.y2) * 0.5 + jitter();
+                ctx.lineTo(mx, my);
+                ctx.lineTo(link.x2, link.y2);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
 
         for (let i = 0; i < particlePool.length; i++) if (particlePool[i].active) particlePool[i].draw();
         for (let i = 0; i < damageTextPool.length; i++) if (damageTextPool[i].active) damageTextPool[i].draw();
@@ -2455,10 +2893,13 @@ function startGame() {
     ui.touchFireButton.addEventListener('mouseup', () => { isFiringTouch = false; });
     ui.touchFireButton.addEventListener('mouseleave', () => { isFiringTouch = false; });
 
-    ui.upgradeButtons.shot.addEventListener('click', () => selectUpgrade('shot'));
-    ui.upgradeButtons.rate.addEventListener('click', () => selectUpgrade('rate'));
-    ui.upgradeButtons.crit.addEventListener('click', () => selectUpgrade('crit'));
-    ui.upgradeButtons.hp.addEventListener('click', () => selectUpgrade('hp'));
+    ui.touchFireButton.addEventListener('mousedown', () => { isFiringTouch = true; });
+ui.touchFireButton.addEventListener('mouseup', () => { isFiringTouch = false; });
+ui.touchFireButton.addEventListener('mouseleave', () => { isFiringTouch = false; });
+
+ui.upgradeSlots.forEach((slot, index) => {
+    slot.button.addEventListener('click', () => selectUpgradeSlot(index));
+});
 
     ui.pauseButton.addEventListener('click', togglePause);
     ui.resumeButton.addEventListener('click', () => setPaused(false));
