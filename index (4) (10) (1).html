@@ -553,7 +553,7 @@ upgradeButtons: {
     let rankingCacheTime = 0;
     let rankingCache = null;
     const RANKING_CACHE_TTL = 10000;
-    let nextUpgradeScore = 4000;
+    let nextUpgradeScore = 2000;
     let gameElapsedMs = 0;
     let lastFrameTime = performance.now();
     let bossIntervalMs = 60000;
@@ -2129,7 +2129,7 @@ function selectUpgradeSlot(slotIndex) {
 
 function startGame() {
     score = 0;
-    nextUpgradeScore = 4000;
+    nextUpgradeScore = 2000;
 
     bossLevel = 0;
     gameElapsedMs = 0;
@@ -2436,7 +2436,7 @@ function startGame() {
         // スコア条件を満たしていても nextUpgradeScore は進めず、ボス撃破後にまとめて判定する。
         if (!isBossActive && !boss && score >= nextUpgradeScore) {
             while (nextUpgradeScore <= score) {
-                nextUpgradeScore += 4000;
+                nextUpgradeScore += 2000;
             }
             openUpgradeModal();
             return;
