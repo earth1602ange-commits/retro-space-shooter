@@ -777,6 +777,26 @@ const electricLinks = [];
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
                 ctx.restore();
+            else if (this.type === 'drill') {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    ctx.fillStyle = this.color;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.moveTo(0, -this.height / 2);
+    ctx.lineTo(this.width / 2, this.height / 2);
+    ctx.lineTo(0, this.height / 4);
+    ctx.lineTo(-this.width / 2, this.height / 2);
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+}
             } else if (this.type === 'homing') {
                 ctx.fillStyle = this.color;
                 ctx.shadowColor = this.color;
@@ -2468,6 +2488,7 @@ function startGame() {
         }
 
         player.update();
+      　updateWeapons();
 
         if (!isBossActive && !boss) {
             enemySpawnTimer++;
