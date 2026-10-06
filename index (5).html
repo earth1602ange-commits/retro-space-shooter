@@ -2011,6 +2011,11 @@ const electricLinks = [];
         bossLevel++;
         stageUpTimer = 150;
         sfx.playUpgrade();
+      　if (nextUpgradeScore < 20000) {
+    nextUpgradeScore += 2000;
+} else {
+    nextUpgradeScore += 20000;
+}
         ui.stageBanner.classList.remove('hidden');
         updateHUD(true);
     }
