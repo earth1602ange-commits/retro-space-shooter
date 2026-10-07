@@ -1,13 +1,11 @@
 <!DOCTYPE html>
 <html lang="ja">
-<title>RETRO SPACE SHOOTER - 無料ブラウザシューティングゲーム</title>
-
-<meta name="description"
-      content="無料で遊べるレトロ風ブラウザシューティングゲーム。高速編隊や60秒ごとに登場するボスを撃破してハイスコアを目指そう！">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Retro Space Shooter EX - Ultimate Optimized Edition</title>
+    <title>RETRO SPACE SHOOTER - 無料ブラウザシューティングゲーム</title>
+    <meta name="description"
+          content="無料で遊べるレトロ風ブラウザシューティングゲーム。高速編隊や60秒ごとに登場するボスを撃破してハイスコアを目指そう！">
     <!-- RETRO SPACE SHOOTER VERSION: v1.4.10 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -553,7 +551,14 @@ upgradeButtons: {
     let rankingCacheTime = 0;
     let rankingCache = null;
     const RANKING_CACHE_TTL = 10000;
-    let nextUpgradeScore = 4000;
+    // アップグレード必要スコア: 2000 → 4000 → 6000 ... → 20000(上限) → 以降ずっと20000
+    const UPGRADE_STEP_BASE = 2000;
+    const UPGRADE_STEP_MAX = 20000;
+    let upgradeCount = 0;
+    function getUpgradeStep() {
+        return Math.min(UPGRADE_STEP_BASE * (upgradeCount + 1), UPGRADE_STEP_MAX);
+    }
+    let nextUpgradeScore = UPGRADE_STEP_BASE;
     let gameElapsedMs = 0;
     let lastFrameTime = performance.now();
     let bossIntervalMs = 60000;
@@ -2187,7 +2192,8 @@ function selectUpgradeSlot(slotIndex) {
 
 function startGame() {
     score = 0;
-    nextUpgradeScore = 4000;
+    upgradeCount = 0;
+    nextUpgradeScore = getUpgradeStep();
 
     bossLevel = 0;
     gameElapsedMs = 0;
@@ -2685,8 +2691,10 @@ function startGame() {
         // ボス戦中（登場演出・戦闘中）はアップグレード画面を出さない。
         // スコア条件を満たしていても nextUpgradeScore は進めず、ボス撃破後にまとめて判定する。
         if (!isBossActive && !boss && score >= nextUpgradeScore) {
+            // 次の閾値 = 現在の閾値 + その時点の必要量(段階的に増加、上限20000)
             while (nextUpgradeScore <= score) {
-                nextUpgradeScore += 4000;
+                upgradeCount++;
+                nextUpgradeScore += getUpgradeStep();
             }
             openUpgradeModal();
             return;
@@ -2893,13 +2901,9 @@ function startGame() {
     ui.touchFireButton.addEventListener('mouseup', () => { isFiringTouch = false; });
     ui.touchFireButton.addEventListener('mouseleave', () => { isFiringTouch = false; });
 
-    ui.touchFireButton.addEventListener('mousedown', () => { isFiringTouch = true; });
-ui.touchFireButton.addEventListener('mouseup', () => { isFiringTouch = false; });
-ui.touchFireButton.addEventListener('mouseleave', () => { isFiringTouch = false; });
-
-ui.upgradeSlots.forEach((slot, index) => {
-    slot.button.addEventListener('click', () => selectUpgradeSlot(index));
-});
+    ui.upgradeSlots.forEach((slot, index) => {
+        slot.button.addEventListener('click', () => selectUpgradeSlot(index));
+    });
 
     ui.pauseButton.addEventListener('click', togglePause);
     ui.resumeButton.addEventListener('click', () => setPaused(false));
