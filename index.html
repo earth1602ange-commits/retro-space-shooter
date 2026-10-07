@@ -162,6 +162,7 @@
             <div class="bg-purple-950/90 border-y-4 border-purple-500 w-full py-6 text-center shadow-2xl animate-bounce">
                 <p class="text-yellow-300 text-xl md:text-3xl font-bold tracking-widest neon-text-yellow">STAGE CLEAR!</p>
                 <p class="text-cyan-300 text-xs md:text-sm mt-2 neon-text-blue">ENEMY FORCES STRENGTHENED</p>
+                <p id="stage-up-bonus" class="text-yellow-200 text-[10px] md:text-xs mt-2"></p>
             </div>
         </div>
 
@@ -473,6 +474,7 @@
         pauseScreen: document.getElementById('pause-screen'),
         pauseButton: document.getElementById('btn-pause'),
         resumeButton: document.getElementById('btn-resume'),
+        stageBonus: document.getElementById('stage-up-bonus'),
         pauseTitleButton: document.getElementById('btn-pause-title'),
         stageBanner: document.getElementById('stage-up-banner'),
         title: document.getElementById('screen-title'),
@@ -569,6 +571,23 @@ upgradeButtons: {
     let formationSpawnTimer = 0;
     let formationDirection = -1;
     let bossLevel = 0;
+    // ボス撃破ごとの敵HP上昇倍率(1.0で従来通り)。上げるほど撃破後の敵が硬くなる。
+    const ENEMY_LEVEL_SCALE = 1.3;
+    // 4番機(shipType 3)ミサイルの最高速度(従来は4.2)
+    const SHIP4_MISSILE_MAX_SPEED = 7.5;
+    // 4番機ミサイルの旋回力(ラジアン/フレーム)。大きいほど小回りが利く。
+    const SHIP4_MISSILE_TURN_RATE = 0.14;
+    // HOMING武器の連射設定
+    const HOMING_BURST_COUNT = 4;      // 1回のバーストで撃つ数
+    const HOMING_SHOT_INTERVAL = 7;    // 1発ごとの間隔(フレーム)
+    let homingBurstRemaining = 0;
+    let homingShotTimer = 0;
+    let homingSideToggle = false;
+    // ボス撃破タイムボーナス: 登場演出が終わって攻撃可能になってからの経過時間で計算。
+    // ボーナス = (BOSS_TIME_BONUS_PAR_SEC - 撃破秒数) × BOSS_TIME_BONUS_PER_SEC (0未満は0)
+    const BOSS_TIME_BONUS_PAR_SEC = 60;
+    const BOSS_TIME_BONUS_PER_SEC = 100;
+    let bossFightMs = 0;
     let isBossActive = false;
     let bossWarningTimer = 0;
     let stageUpTimer = 0;
@@ -615,9 +634,9 @@ const WEAPON_DEFS = {
         name: 'HOMING',
         icon: '🎯',
         title: 'HOMING',
-        desc: '敵を自動追尾。飛行途中で2発に分裂してさらに追撃する。',
+        desc: '左右交互に4連射する追尾弾。最初に狙った敵を追い、倒れたら次の敵へ。途中で各3発に分裂する。',
         theme: 'orange',
-        cooldown: 70
+        cooldown: 120
     }
 };
 
@@ -642,7 +661,7 @@ const electricLinks = [];
 // ELECTRO_RANGE: 自機から最初の標的までの最大距離(px)。これより遠い敵は狙わない。
 // ELECTRO_CHAIN_RANGE: 標的から次の敵へ連鎖できる最大距離(px)。
 // (画面サイズは 480x640。変更前は ELECTRO_RANGE=無制限 / ELECTRO_CHAIN_RANGE=150)
-const ELECTRO_RANGE = 330;
+const ELECTRO_RANGE = 280;
 const ELECTRO_CHAIN_RANGE = 120;
     const keys = {};
     let isFiringTouch = false;
@@ -692,56 +711,84 @@ const ELECTRO_CHAIN_RANGE = 120;
             this.canGuard = false;
             this.splitWeapon = false;
             this.homingFast = false;
+            this.homingMaxSpeed = 0;   // 0なら既定値(通常4.2 / 分裂後8.8)
+            this.homingTurnRate = 0;   // >0なら「旋回角制限」方式で追尾(周回防止)
+            this.lockTarget = null;    // ロックオン中の標的(敵 or ボスパーツ)
+            this.lockIsPart = false;
             this.hitSet.clear();
+        }
+
+        isLockValid() {
+            const t = this.lockTarget;
+            if (!t) return false;
+            if (this.lockIsPart) {
+                return !!(boss && boss.active && boss.currentHp > 0 && t.active && boss.parts.includes(t));
+            }
+            return t.active;
+        }
+
+        // 自分に最も近い敵(またはボスパーツ)をロックオンする。
+        acquireLock() {
+            this.lockTarget = null;
+            this.lockIsPart = false;
+            let minDistSq = Infinity;
+            for (let i = 0; i < enemies.length; i++) {
+                const e = enemies[i];
+                if (!e.active) continue;
+                const dx = e.x + e.width * 0.5 - this.x;
+                const dy = e.y + e.height * 0.5 - this.y;
+                const d2 = dx * dx + dy * dy;
+                if (d2 < minDistSq) { minDistSq = d2; this.lockTarget = e; this.lockIsPart = false; }
+            }
+            if (boss && boss.active && boss.currentHp > 0) {
+                for (let i = 0; i < boss.parts.length; i++) {
+                    const p = boss.parts[i];
+                    if (!p.active) continue;
+                    const dx = boss.x + p.relX - this.x;
+                    const dy = boss.y + p.relY - this.y;
+                    const d2 = dx * dx + dy * dy;
+                    if (d2 < minDistSq) { minDistSq = d2; this.lockTarget = p; this.lockIsPart = true; }
+                }
+            }
         }
 
         update() {
             if (this.type === 'homing') {
-                let targetX = 0, targetY = 0, minDistSq = Infinity, foundTarget = false;
-                for (let i = 0; i < enemies.length; i++) {
-                    const e = enemies[i];
-                    if (!e.active) continue;
-                    const tx = e.x + e.width * 0.5;
-                    const ty = e.y + e.height * 0.5;
-                    const dx = tx - this.x, dy = ty - this.y;
-                    const d2 = dx * dx + dy * dy;
-                    if (d2 < minDistSq) {
-                        minDistSq = d2;
-                        targetX = tx;
-                        targetY = ty;
-                        foundTarget = true;
-                    }
-                }
-                if (boss && boss.active && boss.currentHp > 0) {
-                    for (let i = 0; i < boss.parts.length; i++) {
-                        const p = boss.parts[i];
-                        if (!p.active) continue;
-                        const tx = boss.x + p.relX;
-                        const ty = boss.y + p.relY;
-                        const dx = tx - this.x, dy = ty - this.y;
-                        const d2 = dx * dx + dy * dy;
-                        if (d2 < minDistSq) {
-                            minDistSq = d2;
-                            targetX = tx;
-                            targetY = ty;
-                            foundTarget = true;
+                // 最初にロックオンした標的を追い続け、倒されたら最寄りの次の標的へ切り替える。
+                if (!this.isLockValid()) this.acquireLock();
+
+                if (this.lockTarget) {
+                    const t = this.lockTarget;
+                    const tx = this.lockIsPart ? boss.x + t.relX : t.x + t.width * 0.5;
+                    const ty = this.lockIsPart ? boss.y + t.relY : t.y + t.height * 0.5;
+                    const angle = Math.atan2(ty - this.y, tx - this.x);
+                    const maxHomingSpeed = this.homingMaxSpeed || (this.homingFast ? 8.8 : 4.2);
+
+                    if (this.homingTurnRate > 0) {
+                        // 旋回角制限方式: 向きを毎フレーム一定角まで標的へ回す。
+                        // ・時間が経つほど旋回力が上がる(同じ敵の周りを回り続けない)
+                        // ・標的が進行方向からズレているときは減速して小回りを利かせる
+                        let speed = Math.hypot(this.vx, this.vy) || maxHomingSpeed;
+                        const heading = Math.atan2(this.vy, this.vx);
+                        let diff = angle - heading;
+                        while (diff > Math.PI) diff -= Math.PI * 2;
+                        while (diff < -Math.PI) diff += Math.PI * 2;
+                        const age = this.maxLife - this.life;
+                        const rate = this.homingTurnRate + age * 0.004;
+                        const turn = Math.max(-rate, Math.min(rate, diff));
+                        const wantSpeed = Math.abs(diff) > 0.9 ? maxHomingSpeed * 0.6 : maxHomingSpeed;
+                        speed += (wantSpeed - speed) * 0.15;
+                        this.vx = Math.cos(heading + turn) * speed;
+                        this.vy = Math.sin(heading + turn) * speed;
+                    } else {
+                        const homingAccel = 0.45;
+                        this.vx += Math.cos(angle) * homingAccel;
+                        this.vy += Math.sin(angle) * homingAccel;
+                        const speed = Math.hypot(this.vx, this.vy);
+                        if (speed > maxHomingSpeed) {
+                            this.vx = (this.vx / speed) * maxHomingSpeed;
+                            this.vy = (this.vy / speed) * maxHomingSpeed;
                         }
-                    }
-                }
-
-                const target = foundTarget ? { x: targetX, y: targetY } : null;
-
-                if (target) {
-                    let angle = Math.atan2(target.y - this.y, target.x - this.x);
-                    // 分裂前はゆっくり、分裂後は高速で追尾
-                    const homingAccel = this.isSplit ? 0.45 : 0.45;
-                    const maxHomingSpeed = this.homingFast ? 8.8 : 4.2;
-                    this.vx += Math.cos(angle) * homingAccel;
-                    this.vy += Math.sin(angle) * homingAccel;
-                    let speed = Math.hypot(this.vx, this.vy);
-                    if (speed > maxHomingSpeed) {
-                        this.vx = (this.vx / speed) * maxHomingSpeed;
-                        this.vy = (this.vy / speed) * maxHomingSpeed;
                     }
                 }
             }
@@ -764,11 +811,11 @@ const ELECTRO_CHAIN_RANGE = 120;
                     this.active = false;
 
                     if (this.type === 'homing' && this.splitWeapon) {
-                        // HOMING武器：途中で2発に分裂。分裂弾も敵を追尾する。
+                        // HOMING武器：途中で3発に分裂。分裂弾も敵を追尾する。
                         const baseAngle = Math.atan2(this.vy, this.vx);
                         const splitAngle = 0.42;
                         const speed = 8.8;
-                        for (const angle of [baseAngle - splitAngle, baseAngle + splitAngle]) {
+                        for (const angle of [baseAngle - splitAngle, baseAngle, baseAngle + splitAngle]) {
                             spawnFromPool(playerBulletPool, b => {
                                 b.spawn(
                                     this.x, this.y,
@@ -780,6 +827,8 @@ const ELECTRO_CHAIN_RANGE = 120;
                                 );
                                 b.splitWeapon = false;
                                 b.homingFast = true;
+                                b.lockTarget = this.lockTarget;
+                                b.lockIsPart = this.lockIsPart;
                             });
                         }
                         createExplosion(this.x, this.y, '#ffb347', 8);
@@ -1058,7 +1107,7 @@ const ELECTRO_CHAIN_RANGE = 120;
             sfx.playLaser();
 
             const fire = (x, y, vx, vy, color = '#00f0ff', radius = 3, type = 'normal', life = 999, w = 6, h = 6, critChanceMultiplier = 1, critDamageMultiplier = 1, canGuard = false) => {
-                spawnFromPool(playerBulletPool, b => {
+                return spawnFromPool(playerBulletPool, b => {
                     b.spawn(
                         x, y, vx, vy, color, radius, false, 0, type, life, w, h,
                         critChanceMultiplier, critDamageMultiplier
@@ -1148,7 +1197,11 @@ const ELECTRO_CHAIN_RANGE = 120;
                 this.missileToggle = !this.missileToggle;
                 const side = this.missileToggle ? 1 : -1;
                 const powerBonus = (shotPowerLevel - 1) * 0.3;
-                fire(cx + side * 12, this.y, side * (1.2 + powerBonus), -4.5, '#38bdf8', 4, 'homing', 150);
+                const missile = fire(cx + side * 12, this.y, side * (1.6 + powerBonus), -7, '#38bdf8', 4, 'homing', 130);
+                if (missile) {
+                    missile.homingMaxSpeed = SHIP4_MISSILE_MAX_SPEED;
+                    missile.homingTurnRate = SHIP4_MISSILE_TURN_RATE;
+                }
             }
         }
 
@@ -1247,7 +1300,7 @@ const ELECTRO_CHAIN_RANGE = 120;
             if (type === 0) {
                 this.width = 28;
                 this.height = 28;
-                this.hp = 2 + bossLevel * 1;
+                this.hp = 2 + bossLevel * 1 * ENEMY_LEVEL_SCALE;
                 this.speedX = (Math.random() - 0.5) * 2;
                 this.speedY = Math.random() * 1.5 + 2;
                 this.color = '#ff0055';
@@ -1255,7 +1308,7 @@ const ELECTRO_CHAIN_RANGE = 120;
             } else if (type === 1) {
                 this.width = 36;
                 this.height = 36;
-                this.hp = 5 + bossLevel * 3;
+                this.hp = 5 + bossLevel * 3 * ENEMY_LEVEL_SCALE;
                 this.speedX = (Math.random() - 0.5) * 1.5;
                 this.speedY = 1.3;
                 this.color = '#ff9900';
@@ -1263,7 +1316,7 @@ const ELECTRO_CHAIN_RANGE = 120;
             } else if (type === 2) {
                 this.width = 34;
                 this.height = 34;
-                this.hp = 3 + bossLevel * 2;
+                this.hp = 3 + bossLevel * 2 * ENEMY_LEVEL_SCALE;
                 this.speedX = (Math.random() - 0.5) * 1.0;
                 this.speedY = Math.random() * 2 + 2.5;
                 this.color = '#a3a3a3';
@@ -1274,7 +1327,7 @@ const ELECTRO_CHAIN_RANGE = 120;
                 // 高速編隊機：左右から侵入。出現位置と移動パターンは毎回ランダム。
                 this.width = 18;
                 this.height = 18;
-                this.hp = 1 + Math.floor(bossLevel * 0.5);
+                this.hp = 1 + Math.floor(bossLevel * 0.5 * ENEMY_LEVEL_SCALE);
                 this.speedX = 0;
                 this.speedY = 0;
                 this.color = '#22d3ee';
@@ -1444,6 +1497,17 @@ const ELECTRO_CHAIN_RANGE = 120;
     // ---------------------------------------------------------------
     // Boss
     // ---------------------------------------------------------------
+    // ボス突進攻撃の調整用(フレーム単位。60fps想定で 30フレーム ≒ 0.5秒)
+    const BOSS_CHARGE_TELEGRAPH_FRAMES = 45;  // 点滅時間(約0.75秒)
+    const BOSS_CHARGE_FRONT_WIDTH = 70;       // 「目の前」と見なす左右の幅(px)
+    const BOSS_CHARGE_CHANCE = 0.5;           // 条件を満たしたときに実際に突進する確率
+    const BOSS_CHARGE_MAX_SPEED = 14;         // 突進の最高速度
+    const BOSS_CHARGE_END_Y = GAME_HEIGHT * 0.5; // 突進の到達位置(画面の半分)
+    const BOSS_CHARGE_REACH_MARGIN = 90;      // 到達位置からさらに下、この距離までを「目の前」とみなす
+    const BOSS_RETURN_SPEED = 2.0;            // 元の位置へ戻る速度(まっすぐ上へ)
+    const BOSS_CHARGE_COOLDOWN_BASE = 420;    // 突進後の待機フレーム(レベルで短縮)
+    const BOSS_CHARGE_COOLDOWN_MIN = 240;
+
     class Boss {
         constructor(level = 0) {
             this.x = GAME_WIDTH / 2;
@@ -1454,6 +1518,13 @@ const ELECTRO_CHAIN_RANGE = 120;
             this.level = level;
             this.isInvulnerable = true;
             this.meteorSpawnCooldown = 150;
+
+            // 突進攻撃: idle → telegraph(点滅) → charge(突進) → return(帰還)
+            this.chargeState = 'idle';
+            this.chargeTimer = 0;
+            this.chargeCooldown = 240;
+            this.chargeVy = 0;
+            this.swayPhase = 0; // 左右移動の位相(通常時のみ進む)
 
             this.parts = [
                 {
@@ -1500,6 +1571,61 @@ const ELECTRO_CHAIN_RANGE = 120;
             this.maxHp = this.parts.reduce((sum, p) => sum + p.maxHp, 0);
         }
 
+        // 自機がボスの真下付近にいるか
+        // widthScale: 左右の許容幅の倍率
+        isPlayerInFront(widthScale = 1) {
+            const pcx = player.x + player.width * 0.5;
+            const pcy = player.y + player.height * 0.5;
+            const inLane = Math.abs(pcx - this.x) < BOSS_CHARGE_FRONT_WIDTH * widthScale;
+            // ボスより下で、かつ突進が届く範囲(到達位置の少し先まで)にいること
+            const inReach = pcy > this.y + 60 && pcy < BOSS_CHARGE_END_Y + BOSS_CHARGE_REACH_MARGIN;
+            return inLane && inReach;
+        }
+
+        updateMovementAndCharge() {
+            if (this.chargeState === 'idle') {
+                this.swayPhase += 0.03;
+                this.x = GAME_WIDTH / 2 + Math.sin(this.swayPhase) * (GAME_WIDTH / 2 - 70);
+                this.y = this.targetY;
+                this.chargeCooldown--;
+                if (this.chargeCooldown <= 0) {
+                    if (this.isPlayerInFront() && Math.random() < BOSS_CHARGE_CHANCE) {
+                        this.chargeState = 'telegraph';
+                        this.chargeTimer = BOSS_CHARGE_TELEGRAPH_FRAMES;
+                        sfx.playWarning();
+                    } else {
+                        // 条件外/抽選外なら少し待って再判定
+                        this.chargeCooldown = 60 + Math.floor(Math.random() * 60);
+                    }
+                }
+            } else if (this.chargeState === 'telegraph') {
+                // その場で停止して点滅(約0.5秒)
+                this.chargeTimer--;
+                if (this.chargeTimer <= 0) {
+                    // 溜め中に自機が逃げても、予告した位置へそのまま突っ込む
+                    this.chargeState = 'charge';
+                    this.chargeVy = 3;
+                }
+            } else if (this.chargeState === 'charge') {
+                this.chargeVy = Math.min(BOSS_CHARGE_MAX_SPEED, this.chargeVy + 0.9);
+                this.y += this.chargeVy;
+                if (this.y >= BOSS_CHARGE_END_Y) {
+                    this.y = BOSS_CHARGE_END_Y;
+                    this.chargeState = 'return';
+                    createExplosion(this.x, this.y + 30, '#ff7a00', 14);
+                }
+            } else if (this.chargeState === 'return') {
+                // xは固定のまま、まっすぐ上へ戻る
+                this.y -= BOSS_RETURN_SPEED;
+                if (this.y <= this.targetY) {
+                    this.y = this.targetY;
+                    this.chargeState = 'idle';
+                    this.chargeCooldown = Math.max(BOSS_CHARGE_COOLDOWN_MIN,
+                        BOSS_CHARGE_COOLDOWN_BASE - this.level * 15) + Math.floor(Math.random() * 120);
+                }
+            }
+        }
+
         get currentHp() {
             return this.parts.reduce((sum, p) => sum + (p.active ? Math.max(0, p.hp) : 0), 0);
         }
@@ -1515,7 +1641,10 @@ const ELECTRO_CHAIN_RANGE = 120;
             }
 
             this.isInvulnerable = false;
-            this.x = GAME_WIDTH / 2 + Math.sin(this.timer * 0.03) * (GAME_WIDTH / 2 - 70);
+            this.updateMovementAndCharge();
+
+            // 突進の予告・突進・帰還の間は、射撃も隕石の呼び出しも行わない。
+            if (this.chargeState !== 'idle') return;
 
             // ボス戦中は一定間隔で隕石(type 2)を呼び出す。
             this.meteorSpawnCooldown--;
@@ -1580,6 +1709,15 @@ const ELECTRO_CHAIN_RANGE = 120;
         draw() {
             ctx.save();
             ctx.translate(this.x, this.y);
+
+            if (this.chargeState === 'telegraph') {
+                // 突進の予告: 進路を赤くハイライトし、機体を点滅させる
+                ctx.save();
+                ctx.fillStyle = 'rgba(255, 30, 60, 0.16)';
+                ctx.fillRect(-BOSS_CHARGE_FRONT_WIDTH, 40, BOSS_CHARGE_FRONT_WIDTH * 2, GAME_HEIGHT);
+                ctx.restore();
+                ctx.globalAlpha = (Math.floor(this.chargeTimer / 3) % 2 === 0) ? 0.3 : 1;
+            }
 
             if (this.isInvulnerable) {
                 ctx.save();
@@ -2009,6 +2147,14 @@ const ELECTRO_CHAIN_RANGE = 120;
         
         boss.active = false;
         score += 6000;
+
+        // タイムボーナス: 早く倒すほど加算
+        const clearSec = bossFightMs / 1000;
+        const timeBonus = Math.max(0, Math.round((BOSS_TIME_BONUS_PAR_SEC - clearSec) * BOSS_TIME_BONUS_PER_SEC / 10) * 10);
+        score += timeBonus;
+        ui.stageBonus.textContent = timeBonus > 0
+            ? `CLEAR TIME ${clearSec.toFixed(1)}s  /  TIME BONUS +${timeBonus}`
+            : `CLEAR TIME ${clearSec.toFixed(1)}s  /  NO TIME BONUS`;
         isBossActive = false;
         gameElapsedMs = 0;
         formationSpawnTimer = 0;
@@ -2228,9 +2374,13 @@ function startGame() {
     weaponTimers.drill = 0;
             weaponTimers.electro = 0;
             weaponTimers.homing = 0;
+            homingBurstRemaining = 0;
+            homingShotTimer = 0;
             wiperX = WIPER_X_MIN;
     weaponTimers.electro = 0;
     weaponTimers.homing = 0;
+    homingBurstRemaining = 0;
+    homingShotTimer = 0;
     electricLinks.length = 0;
     wiperHitTimers.clear();
 
@@ -2504,6 +2654,22 @@ function startGame() {
         }
     }
 
+    // 突進中のボス本体(生存中のパーツ)と自機の接触
+    function checkBossChargeCollision() {
+        if (!boss || !boss.active || boss.chargeState !== 'charge') return;
+        for (let i = 0; i < boss.parts.length; i++) {
+            const part = boss.parts[i];
+            if (!part.active) continue;
+            const px = boss.x + part.relX - part.width / 2;
+            const py = boss.y + part.relY - part.height / 2;
+            if (px < player.x + player.width && px + part.width > player.x &&
+                py < player.y + player.height && py + part.height > player.y) {
+                player.hit();
+                return;
+            }
+        }
+    }
+
     function compactEnemies() {
         let writeIdx = 0;
         for (let readIdx = 0; readIdx < enemies.length; readIdx++) {
@@ -2681,17 +2847,28 @@ function startGame() {
             }
         }
 
-        // HOMING: 自動追尾弾を発射し、途中で2発へ分裂。
+        // HOMING: 左右交互に1発ずつ連射(計4発)。各弾は途中で3発に分裂する。
         if (ownedWeapons.includes('homing')) {
-            if (weaponTimers.homing > 0) {
+            if (homingBurstRemaining > 0) {
+                if (homingShotTimer > 0) {
+                    homingShotTimer--;
+                } else {
+                    const cx = player.x + player.width * 0.5;
+                    homingSideToggle = !homingSideToggle;
+                    const side = homingSideToggle ? 1 : -1;
+                    spawnFromPool(playerBulletPool, b => {
+                        b.spawn(cx + side * 12, player.y, side * 1.6, -7.2, '#ffb347', 5, true, 32, 'homing', 120, 10, 10, 1, 1);
+                        b.splitWeapon = true;
+                    });
+                    homingBurstRemaining--;
+                    homingShotTimer = HOMING_SHOT_INTERVAL;
+                    if (homingBurstRemaining === 0) weaponTimers.homing = WEAPON_DEFS.homing.cooldown;
+                }
+            } else if (weaponTimers.homing > 0) {
                 weaponTimers.homing--;
             } else {
-                const cx = player.x + player.width * 0.5;
-                spawnFromPool(playerBulletPool, b => {
-                    b.spawn(cx, player.y, 0, -7.2, '#ffb347', 5, true, 32, 'homing', 120, 10, 10, 1, 1);
-                    b.splitWeapon = true;
-                });
-                weaponTimers.homing = WEAPON_DEFS.homing.cooldown;
+                homingBurstRemaining = HOMING_BURST_COUNT;
+                homingShotTimer = 0;
             }
         }
 
@@ -2720,6 +2897,7 @@ function startGame() {
 
         gameElapsedMs += deltaMs;
         if (!isBossActive && !boss) formationSpawnTimer += deltaMs;
+        if (boss && boss.active && !boss.isInvulnerable) bossFightMs += deltaMs;
 
         // ボス戦中（登場演出・戦闘中）はアップグレード画面を出さない。
         // スコア条件を満たしていても nextUpgradeScore は進めず、ボス撃破後にまとめて判定する。
@@ -2748,6 +2926,7 @@ function startGame() {
             if (bossWarningTimer === 0) {
                 ui.bossWarning.classList.add('hidden');
                 boss = new Boss(bossLevel);
+                bossFightMs = 0;
             }
         }
 
@@ -2788,6 +2967,7 @@ function startGame() {
         if (boss) boss.update();
 
         checkCollisions();
+        checkBossChargeCollision();
         // Update UI at a lower cadence; gameplay remains frame-perfect.
         if ((++hudFrame & 7) === 0) updateHUD();
     }
