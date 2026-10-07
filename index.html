@@ -126,6 +126,7 @@
                     </div>
                     <button id="btn-pause" class="pause-button">PAUSE</button>
                 </div>
+                <div id="passive-status" class="text-[10px] text-slate-300 h-3"></div>
             </div>
         </div>
 
@@ -258,6 +259,10 @@
     <div id="status-upg-3" class="w-full text-center text-[10px] text-green-300 group-hover:text-white font-bold py-1 bg-green-900/60 rounded">選択する</div>
 </button>
             </div>
+
+            <button id="btn-reroll" class="mt-4 px-5 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-200 text-xs font-bold rounded border border-cyan-400 disabled:opacity-40 disabled:pointer-events-none">
+                🔄 REROLL (1)
+            </button>
         </div>
 
         <div id="screen-title" class="absolute inset-0 flex flex-col items-center justify-center bg-black/88 p-6 text-center z-30">
@@ -268,7 +273,7 @@
                 <p class="text-cyan-400 font-bold mb-1 border-b border-cyan-500/30 pb-1">[ 操作 & ルール ]</p>
                 <p>• 移動 : WASD / 矢印キー / タッチドラッグ</p>
                 <p>• 発射 : スペースキー / [FIRE]ボタン</p>
-                <p class="text-yellow-400 pt-1 border-t border-slate-700/60 mt-1">• 4,000pt毎 : システム強化選択！</p>
+                <p class="text-yellow-400 pt-1 border-t border-slate-700/60 mt-1">• スコア達成ごと : システム強化選択！(リロール1回可)</p>
                 <p class="text-purple-400">• 60秒毎 : ボス艦隊出現！</p>
             </div>
 
@@ -474,6 +479,8 @@
         pauseScreen: document.getElementById('pause-screen'),
         pauseButton: document.getElementById('btn-pause'),
         resumeButton: document.getElementById('btn-resume'),
+        passiveStatus: document.getElementById('passive-status'),
+        rerollButton: document.getElementById('btn-reroll'),
         stageBonus: document.getElementById('stage-up-bonus'),
         pauseTitleButton: document.getElementById('btn-pause-title'),
         stageBanner: document.getElementById('stage-up-banner'),
@@ -568,6 +575,9 @@ upgradeButtons: {
     let gameElapsedMs = 0;
     let lastFrameTime = performance.now();
     let bossIntervalMs = 60000;
+    // 敵の出現量(従来: 間隔35フレーム / 編隊7体)
+    const ENEMY_SPAWN_INTERVAL_FRAMES = 27;   // 小さいほど通常敵が多く出る
+    const FORMATION_ENEMY_COUNT = 9;          // 高速編隊1回あたりの数
     let formationSpawnTimer = 0;
     let formationDirection = -1;
     let bossLevel = 0;
@@ -588,6 +598,80 @@ upgradeButtons: {
     const BOSS_TIME_BONUS_PAR_SEC = 60;
     const BOSS_TIME_BONUS_PER_SEC = 100;
     let bossFightMs = 0;
+    // ===== PASSIVE SKILLS =====
+    const PASSIVE_OFFER_CHANCE = 0.5;            // アップグレード画面にパッシブが1枠出る確率
+    const PASSIVE_COOLDOWN_CUT_PER_LV = 0.12;    // 武器クールダウン短縮(1Lvあたり)
+    const KILL_CRIT_BONUS = 0.25;                // 撃破後の会心率アップ量
+    const KILL_CRIT_DURATION_MS = 8000;          // 1スタックの持続時間
+    const KILL_CRIT_MAX_STACKS = 4;              // 重複できる数(撃破ごとに1スタック)
+    const LOW_HP_POWER_MAX = 0.6;                // HP残りわずかのとき最大で攻撃力+60%
+    const SHIELD_INTERVAL_MS = 30000;            // シールド再取得までの時間
+    const passiveLevels = { cooldown: 0, killCrit: 0, lowHpPower: 0, bossHeal: 0, shield: 0 };
+    const PASSIVE_DEFS = {
+        cooldown: {
+            icon: '⏱️', title: '武器クールダウン短縮', maxLevel: 3,
+            desc: () => `全武器のクールダウン-${Math.round(PASSIVE_COOLDOWN_CUT_PER_LV * 100)}%`
+        },
+        killCrit: {
+            icon: '💥', title: 'キルラッシュ', maxLevel: 1,
+            desc: () => `敵を倒すと${KILL_CRIT_DURATION_MS / 1000}秒間 会心率+${Math.round(KILL_CRIT_BONUS * 100)}%(最大${KILL_CRIT_MAX_STACKS}重)`
+        },
+        lowHpPower: {
+            icon: '🩸', title: '背水の陣', maxLevel: 1,
+            desc: () => `HPが減るほど攻撃力UP(最大+${Math.round(LOW_HP_POWER_MAX * 100)}%)`
+        },
+        bossHeal: {
+            icon: '💊', title: 'ボスの残骸', maxLevel: 1,
+            desc: () => 'ボスを倒すたびにHPを1回復'
+        },
+        shield: {
+            icon: '🛡️', title: 'エネルギーシールド', maxLevel: 1,
+            desc: () => `${SHIELD_INTERVAL_MS / 1000}秒ごとにシールド獲得(1回の被弾を防ぐ)`
+        }
+    };
+    const killCritTimers = [];   // 各スタックの残り時間(ms)
+    let lastPassiveText = '';
+    let shieldTimerMs = 0;
+
+    function weaponCooldown(id) {
+        const cut = Math.min(0.6, passiveLevels.cooldown * PASSIVE_COOLDOWN_CUT_PER_LV);
+        return Math.max(1, Math.round(WEAPON_DEFS[id].cooldown * (1 - cut)));
+    }
+    function getCritChanceBonus() {
+        return killCritTimers.length * KILL_CRIT_BONUS;
+    }
+    function getLowHpPowerMultiplier() {
+        if (passiveLevels.lowHpPower <= 0) return 1;
+        const ratio = Math.max(0, player.lives) / Math.max(1, player.maxLives);
+        return 1 + LOW_HP_POWER_MAX * (1 - ratio);
+    }
+    // 会心判定。chance=1.25 なら確定で1段(×倍率)、さらに25%でもう1段(×倍率)。
+    // critMult は1段あたりの倍率(通常2、弾によっては2×critDamageMultiplier)。
+    // 戻り値: { tiers: 発動した段数, mult: 総合倍率 }
+    function rollCrit(chance, critMult) {
+        const guaranteed = Math.floor(chance);
+        const tiers = guaranteed + (Math.random() < chance - guaranteed ? 1 : 0);
+        return { tiers, mult: Math.pow(critMult, tiers) };
+    }
+    function onEnemyKilled() {
+        if (passiveLevels.killCrit <= 0) return;
+        if (killCritTimers.length < KILL_CRIT_MAX_STACKS) {
+            killCritTimers.push(KILL_CRIT_DURATION_MS);
+        } else {
+            // 上限なら、残り時間が最も短いスタックを更新して延長する
+            let minIdx = 0;
+            for (let i = 1; i < killCritTimers.length; i++) {
+                if (killCritTimers[i] < killCritTimers[minIdx]) minIdx = i;
+            }
+            killCritTimers[minIdx] = KILL_CRIT_DURATION_MS;
+        }
+    }
+    function resetPassives() {
+        for (const k of Object.keys(passiveLevels)) passiveLevels[k] = 0;
+        killCritTimers.length = 0;
+        shieldTimerMs = 0;
+    }
+
     let isBossActive = false;
     let bossWarningTimer = 0;
     let stageUpTimer = 0;
@@ -1037,6 +1121,7 @@ const ELECTRO_CHAIN_RANGE = 120;
             this.shootCooldown = 0;
             this.invulnerableTimer = 0;
             this.missileToggle = false;
+            this.shield = false;
         }
 
         update() {
@@ -1208,6 +1293,16 @@ const ELECTRO_CHAIN_RANGE = 120;
         hit() {
             if (this.invulnerableTimer > 0) return;
 
+            if (this.shield) {
+                // シールドが1回分の被弾を無効化
+                this.shield = false;
+                shieldTimerMs = 0;
+                this.invulnerableTimer = 40;
+                sfx.playExplosion(false);
+                createExplosion(this.x + this.width / 2, this.y + this.height / 2, '#38bdf8', 18);
+                return;
+            }
+
             this.lives--;
             sfx.playExplosion(true);
             createExplosion(this.x + this.width / 2, this.y + this.height / 2, '#ff0055', 25);
@@ -1279,6 +1374,18 @@ const ELECTRO_CHAIN_RANGE = 120;
             ctx.lineTo(4, 12);
             ctx.closePath();
             ctx.fill();
+
+            if (this.shield) {
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.55 + 0.25 * Math.sin(renderFrame * 0.2);
+                ctx.beginPath();
+                ctx.arc(0, 0, 25, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.globalAlpha = 0.12;
+                ctx.fillStyle = '#38bdf8';
+                ctx.fill();
+            }
 
             ctx.restore();
         }
@@ -1817,7 +1924,7 @@ const ELECTRO_CHAIN_RANGE = 120;
 
     function spawnFormationWave() {
         const fromLeft = Math.random() < 0.5;
-        const count = 7;
+        const count = FORMATION_ENEMY_COUNT;
         const spacingY = 26;
         const speed = 8.5;
 
@@ -2163,6 +2270,11 @@ const ELECTRO_CHAIN_RANGE = 120;
         createExplosion(boss.x, boss.y, '#c084fc', 60);
         boss = null;
 
+        if (passiveLevels.bossHeal > 0 && player.lives < player.maxLives) {
+            player.lives++;
+            createDamageText(player.x + player.width / 2, player.y - 10, 'HP+1', '#4ade80', true);
+        }
+
         bossLevel++;
         stageUpTimer = 150;
         sfx.playUpgrade();
@@ -2173,16 +2285,44 @@ const ELECTRO_CHAIN_RANGE = 120;
     function buildUpgradeOptions() {
     const options = ['shot', 'rate', 'crit', 'hp'];
 
-    // 武器を3つ未満所持していて、40%の確率に当選したら
-    // 既存4枠のうち1枠を未取得武器に置き換える
+    const isMaxed = t => (t === 'shot' && shotPowerLevel >= 4) ||
+        (t === 'rate' && fireRateLevel >= 4) || (t === 'crit' && critLevel >= 5);
+
+    // 置き換える枠を選ぶ。武器・パッシブがまだ入っていない枠のうち、
+    // 強化MAXで選べない枠があればそこを優先する。
+    const pickReplaceIndex = () => {
+        let candidates = options.map((o, i) => i)
+            .filter(i => !options[i].startsWith('weapon:') && !options[i].startsWith('passive:'));
+        const maxed = candidates.filter(i => isMaxed(options[i]));
+        if (maxed.length > 0) candidates = maxed;
+        return candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : -1;
+    };
+
+    // 武器を3つ未満所持していて、40%の確率に当選したら未取得武器を1枠出す
     if (ownedWeapons.length < MAX_WEAPONS && Math.random() < WEAPON_OFFER_CHANCE) {
         const availableWeapons = Object.keys(WEAPON_DEFS)
             .filter(id => !ownedWeapons.includes(id));
 
         if (availableWeapons.length > 0) {
-            const weaponId = availableWeapons[Math.floor(Math.random() * availableWeapons.length)];
-            const replaceIndex = Math.floor(Math.random() * options.length);
-            options[replaceIndex] = `weapon:${weaponId}`;
+            const replaceIndex = pickReplaceIndex();
+            if (replaceIndex >= 0) {
+                const weaponId = availableWeapons[Math.floor(Math.random() * availableWeapons.length)];
+                options[replaceIndex] = `weapon:${weaponId}`;
+            }
+        }
+    }
+
+    // パッシブスキルを1枠だけ出す
+    if (Math.random() < PASSIVE_OFFER_CHANCE) {
+        const availablePassives = Object.keys(PASSIVE_DEFS)
+            .filter(id => passiveLevels[id] < PASSIVE_DEFS[id].maxLevel);
+
+        if (availablePassives.length > 0) {
+            const replaceIndex = pickReplaceIndex();
+            if (replaceIndex >= 0) {
+                const passiveId = availablePassives[Math.floor(Math.random() * availablePassives.length)];
+                options[replaceIndex] = `passive:${passiveId}`;
+            }
         }
     }
 
@@ -2202,6 +2342,21 @@ function configureUpgradeSlot(slotIndex, type) {
         slot.title.innerText = weapon.title;
         slot.desc.innerText = weapon.desc;
         slot.badge.innerText = `WEAPON ${ownedWeapons.length + 1}/${MAX_WEAPONS}`;
+        slot.status.innerText = '取得する';
+
+        return;
+    }
+
+    if (type.startsWith('passive:')) {
+        const id = type.substring(8);
+        const def = PASSIVE_DEFS[id];
+
+        slot.icon.innerText = def.icon;
+        slot.title.innerText = def.title;
+        slot.desc.innerText = def.desc();
+        slot.badge.innerText = def.maxLevel > 1
+            ? `PASSIVE LV.${passiveLevels[id]}/${def.maxLevel}`
+            : 'PASSIVE';
         slot.status.innerText = '取得する';
 
         return;
@@ -2254,8 +2409,8 @@ function configureUpgradeSlot(slotIndex, type) {
             slot.desc.innerText = `最大HP+1 ＆ 体力回復 (現在:${player.maxLives})`;
             slot.badge.innerText = `UP:${hpUpgradesCount}/3`;
         } else {
-            slot.title.innerText = 'HP全回復';
-            slot.desc.innerText = `機体を完全修理 (HP:${player.lives}/${player.maxLives})`;
+            slot.title.innerText = 'HP回復';
+            slot.desc.innerText = `機体を修理 HP+1 (HP:${player.lives}/${player.maxLives})`;
             slot.badge.innerText = 'UNLIMITED';
         }
 
@@ -2263,15 +2418,42 @@ function configureUpgradeSlot(slotIndex, type) {
     }
 }
 
-function openUpgradeModal() {
-    gameState = STATE_UPGRADE;
+let upgradeRerollUsed = false;   // アップグレード画面ごとに1回だけリロール可能
 
-    const options = buildUpgradeOptions();
-
+function applyUpgradeOptions(options) {
     for (let i = 0; i < ui.upgradeSlots.length; i++) {
         currentUpgradeOptions[i] = options[i];
         configureUpgradeSlot(i, options[i]);
     }
+}
+
+function updateRerollButton() {
+    ui.rerollButton.disabled = upgradeRerollUsed;
+    ui.rerollButton.textContent = upgradeRerollUsed ? '🔄 REROLL USED' : '🔄 REROLL (1)';
+}
+
+function rerollUpgradeOptions() {
+    if (gameState !== STATE_UPGRADE || upgradeRerollUsed) return;
+    upgradeRerollUsed = true;
+
+    // 現在と同じ並びにならないよう、数回引き直す(出せる候補が無ければそのまま)
+    const before = currentUpgradeOptions.join('|');
+    let options = buildUpgradeOptions();
+    for (let i = 0; i < 12 && options.join('|') === before; i++) {
+        options = buildUpgradeOptions();
+    }
+
+    applyUpgradeOptions(options);
+    updateRerollButton();
+    sfx.playUpgrade();
+}
+
+function openUpgradeModal() {
+    gameState = STATE_UPGRADE;
+
+    upgradeRerollUsed = false;
+    applyUpgradeOptions(buildUpgradeOptions());
+    updateRerollButton();
 
     ui.upgrade.classList.remove('hidden');
 }
@@ -2290,6 +2472,15 @@ function selectUpgradeSlot(slotIndex) {
         ) {
             ownedWeapons.push(weaponId);
         }
+    } else if (type.startsWith('passive:')) {
+        const id = type.substring(8);
+        if (PASSIVE_DEFS[id] && passiveLevels[id] < PASSIVE_DEFS[id].maxLevel) {
+            passiveLevels[id]++;
+            if (id === 'shield') {
+                shieldTimerMs = 0;
+                player.shield = true;   // 取得した瞬間から1枚持った状態にする
+            }
+        }
     } else if (type === 'shot' && shotPowerLevel < 4) {
         shotPowerLevel++;
 
@@ -2303,8 +2494,10 @@ function selectUpgradeSlot(slotIndex) {
         if (hpUpgradesCount < 3) {
             hpUpgradesCount++;
             player.maxLives++;
+            player.lives = player.maxLives;               // 強化中は最大HP+1 ＆ 全回復
+        } else {
+            player.lives = Math.min(player.maxLives, player.lives + 1);   // MAX後はHP+1のみ
         }
-        player.lives = player.maxLives;
     }
 
     sfx.playUpgrade();
@@ -2324,8 +2517,10 @@ function selectUpgradeSlot(slotIndex) {
             if (hpUpgradesCount < 3) {
                 hpUpgradesCount++;
                 player.maxLives++;
+                player.lives = player.maxLives;
+            } else {
+                player.lives = Math.min(player.maxLives, player.lives + 1);
             }
-            player.lives = player.maxLives;
         }
 
         sfx.playUpgrade();
@@ -2371,6 +2566,7 @@ function startGame() {
     hpUpgradesCount = 0;
 
     ownedWeapons.length = 0;
+    resetPassives();
     weaponTimers.drill = 0;
             weaponTimers.electro = 0;
             weaponTimers.homing = 0;
@@ -2499,6 +2695,21 @@ function startGame() {
             lastHudLives = lives;
         }
 
+        // 取得中のパッシブ表示(キルラッシュ発動中/シールド状態も反映)
+        let passiveText = '';
+        for (const id of Object.keys(PASSIVE_DEFS)) {
+            const lv = passiveLevels[id];
+            if (lv <= 0) continue;
+            passiveText += PASSIVE_DEFS[id].icon + (PASSIVE_DEFS[id].maxLevel > 1 ? lv : '');
+            if (id === 'killCrit' && killCritTimers.length > 0) passiveText += '🔥×' + killCritTimers.length;
+            if (id === 'shield') passiveText += player.shield ? '✔' : Math.max(0, Math.ceil((SHIELD_INTERVAL_MS - shieldTimerMs) / 1000)) + 's';
+            passiveText += ' ';
+        }
+        if (force || passiveText !== lastPassiveText) {
+            ui.passiveStatus.textContent = passiveText;
+            lastPassiveText = passiveText;
+        }
+
         if (boss && boss.active) {
             if (ui.bossHud.classList.contains('hidden')) ui.bossHud.classList.remove('hidden');
             const hpPercent = Math.max(0, Math.floor((boss.currentHp / boss.maxHp) * 100));
@@ -2558,19 +2769,21 @@ function startGame() {
                     if (!isPierce) bullet.active = false;
                     else bullet.hitSet.add(enemy);
 
-                    const critChance = Math.min(1, critLevel * 0.05 * (bullet.critChanceMultiplier || 1));
-                    const isCrit = Math.random() < critChance;
-                    const baseDamage = bullet.type === 'drill' ? shotPowerLevel * 3 : shotPowerLevel;
-                    const damage = isCrit ? baseDamage * 2 * (bullet.critDamageMultiplier || 1) : baseDamage;
-                    const dmgColor = isCrit ? '#ff0055' : '#ffff00';
+                    const critChance = critLevel * 0.05 * (bullet.critChanceMultiplier || 1) + getCritChanceBonus();
+                    const critRoll = rollCrit(critChance, 2 * (bullet.critDamageMultiplier || 1));
+                    const isCrit = critRoll.tiers > 0;
+                    const baseDamage = (bullet.type === 'drill' ? shotPowerLevel * 3 : shotPowerLevel) * getLowHpPowerMultiplier();
+                    const damage = baseDamage * critRoll.mult;
+                    const dmgColor = critRoll.tiers >= 2 ? '#ff9900' : (isCrit ? '#ff0055' : '#ffff00');
 
                     enemy.hp -= damage;
                     
-                    createDamageText(bullet.x, bullet.y, damage, dmgColor, isCrit);
+                    createDamageText(bullet.x, bullet.y, Math.max(1, Math.round(damage)), dmgColor, isCrit);
                     createExplosion(bullet.x, bullet.y, bullet.color, 3);
 
                     if (enemy.hp <= 0) {
                         enemy.active = false;
+                        onEnemyKilled();
                         score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
                         sfx.playExplosion(false);
                         createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color, 12);
@@ -2598,15 +2811,16 @@ function startGame() {
                         if (!isPierce) bullet.active = false;
                         else bullet.hitSet.add(part);
 
-                        const critChance = Math.min(1, critLevel * 0.05 * (bullet.critChanceMultiplier || 1));
-                        const isCrit = Math.random() < critChance;
-                        const baseDamage = bullet.type === 'drill' ? shotPowerLevel * 3 : shotPowerLevel;
-                        const damage = isCrit ? baseDamage * 2 * (bullet.critDamageMultiplier || 1) : baseDamage;
-                        const dmgColor = isCrit ? '#ff0055' : '#ffff00';
+                        const critChance = critLevel * 0.05 * (bullet.critChanceMultiplier || 1) + getCritChanceBonus();
+                        const critRoll = rollCrit(critChance, 2 * (bullet.critDamageMultiplier || 1));
+                        const isCrit = critRoll.tiers > 0;
+                        const baseDamage = (bullet.type === 'drill' ? shotPowerLevel * 3 : shotPowerLevel) * getLowHpPowerMultiplier();
+                        const damage = baseDamage * critRoll.mult;
+                        const dmgColor = critRoll.tiers >= 2 ? '#ff9900' : (isCrit ? '#ff0055' : '#ffff00');
 
                         part.hp -= damage;
 
-                        createDamageText(bullet.x, bullet.y, damage, dmgColor, isCrit);
+                        createDamageText(bullet.x, bullet.y, Math.max(1, Math.round(damage)), dmgColor, isCrit);
                         createExplosion(bullet.x, bullet.y, part.color, 3);
 
                         if (part.hp <= 0) {
@@ -2697,7 +2911,7 @@ function startGame() {
 
                 fireDrill(cx - 15);
                 fireDrill(cx + 15);
-                weaponTimers.drill = WEAPON_DEFS.drill.cooldown;
+                weaponTimers.drill = weaponCooldown('drill');
             }
         }
 
@@ -2755,12 +2969,13 @@ function startGame() {
                     for (let i = 0; i < chain.length; i++) {
                         const enemy = chain[i];
                         if (!enemy.active) continue;
-                        enemy.hp -= shotPowerLevel * 1.5;
-                        createDamageText(enemy.x + enemy.width * 0.5, enemy.y, Math.round(shotPowerLevel * 1.5), '#c084fc', false);
+                        enemy.hp -= shotPowerLevel * 1.5 * getLowHpPowerMultiplier();
+                        createDamageText(enemy.x + enemy.width * 0.5, enemy.y, Math.round(shotPowerLevel * 1.5 * getLowHpPowerMultiplier()), '#c084fc', false);
                         createExplosion(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.5, '#a855f7', 5);
 
                         if (enemy.hp <= 0) {
                             enemy.active = false;
+                            onEnemyKilled();
                             score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
                             sfx.playExplosion(false);
                             createExplosion(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.5, enemy.color, 12);
@@ -2783,7 +2998,7 @@ function startGame() {
                         y2: first.y + first.height * 0.5,
                         life: 10
                     });
-                    weaponTimers.electro = WEAPON_DEFS.electro.cooldown;
+                    weaponTimers.electro = weaponCooldown('electro');
                 }
             }
         }
@@ -2814,13 +3029,14 @@ function startGame() {
                 ) {
                     const last = wiperHitTimers.get(enemy) || 0;
                     if (last <= 0) {
-                        const dmg = Math.max(1, Math.round(shotPowerLevel * 0.7));
+                        const dmg = Math.max(1, Math.round(shotPowerLevel * 0.7 * getLowHpPowerMultiplier()));
                         enemy.hp -= dmg;
                         wiperHitTimers.set(enemy, 8);
                         createDamageText(ex, ey, dmg, '#86efac', false);
 
                         if (enemy.hp <= 0) {
                             enemy.active = false;
+                            onEnemyKilled();
                             score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
                             createExplosion(ex, ey, enemy.color, 10);
                         }
@@ -2862,7 +3078,7 @@ function startGame() {
                     });
                     homingBurstRemaining--;
                     homingShotTimer = HOMING_SHOT_INTERVAL;
-                    if (homingBurstRemaining === 0) weaponTimers.homing = WEAPON_DEFS.homing.cooldown;
+                    if (homingBurstRemaining === 0) weaponTimers.homing = weaponCooldown('homing');
                 }
             } else if (weaponTimers.homing > 0) {
                 weaponTimers.homing--;
@@ -2898,6 +3114,19 @@ function startGame() {
         gameElapsedMs += deltaMs;
         if (!isBossActive && !boss) formationSpawnTimer += deltaMs;
         if (boss && boss.active && !boss.isInvulnerable) bossFightMs += deltaMs;
+
+        for (let i = killCritTimers.length - 1; i >= 0; i--) {
+            killCritTimers[i] -= deltaMs;
+            if (killCritTimers[i] <= 0) killCritTimers.splice(i, 1);
+        }
+        if (passiveLevels.shield > 0 && !player.shield) {
+            shieldTimerMs += deltaMs;
+            if (shieldTimerMs >= SHIELD_INTERVAL_MS) {
+                player.shield = true;
+                shieldTimerMs = 0;
+                sfx.playUpgrade();
+            }
+        }
 
         // ボス戦中（登場演出・戦闘中）はアップグレード画面を出さない。
         // スコア条件を満たしていても nextUpgradeScore は進めず、ボス撃破後にまとめて判定する。
@@ -2942,7 +3171,7 @@ function startGame() {
 
         if (!isBossActive && !boss) {
             enemySpawnTimer++;
-            if (enemySpawnTimer > 35) {
+            if (enemySpawnTimer > ENEMY_SPAWN_INTERVAL_FRAMES) {
                 enemySpawnTimer = 0;
                 const rand = Math.random();
                 const type = rand < 0.45 ? 0 : (rand < 0.75 ? 2 : 1);
@@ -3117,6 +3346,7 @@ function startGame() {
     ui.upgradeSlots.forEach((slot, index) => {
         slot.button.addEventListener('click', () => selectUpgradeSlot(index));
     });
+    ui.rerollButton.addEventListener('click', rerollUpgradeOptions);
 
     ui.pauseButton.addEventListener('click', togglePause);
     ui.resumeButton.addEventListener('click', () => setPaused(false));
