@@ -106,7 +106,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.4.10</div>
+        <div class="version-badge" aria-label="Game version">v1.5.10</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -2068,87 +2068,35 @@ const ELECTRO_CHAIN_RANGE = 120;
         const cleanShipType = normalizeShipType(shipType);
 
         try {
-            // 同名候補をすべて取得。過去に重複登録されたデータがあっても、
-            // 一番高いスコアの行を「本人の記録」として扱う。
-            const lookupUrl = `${SUPABASE_SCORES_URL}?select=id,player_name,score,ship_type,created_at&player_name=ilike.${encodeURIComponent(cleanName)}&order=score.desc,created_at.asc&limit=20`;
-            const lookupResponse = await fetch(lookupUrl, {
-                method: 'GET',
-                headers: {
-                    apikey: SUPABASE_ANON_KEY,
-                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`
-                },
-                cache: 'no-store'
-            });
-
-            if (!lookupResponse.ok) {
-                const message = await lookupResponse.text();
-                throw new Error(`Supabase lookup ${lookupResponse.status}: ${message}`);
-            }
-
-            const existingRows = await lookupResponse.json();
-            const existing = existingRows[0] || null;
-
-            if (existing) {
-                const oldScore = Number(existing.score) || 0;
-
-                if (cleanScore <= oldScore) {
-                    rankingOnline = true;
-                    rankingCache = null;
-                    rankingCacheTime = 0;
-                    return { ok: true, updated: false, bestScoreKept: true, oldScore };
-                }
-
-                const updateResponse = await fetch(`${SUPABASE_SCORES_URL}?id=eq.${encodeURIComponent(existing.id)}`, {
-                    method: 'PATCH',
-                    headers: {
-                        apikey: SUPABASE_ANON_KEY,
-                        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-                        'Content-Type': 'application/json',
-                        Prefer: 'return=representation'
-                    },
-                    body: JSON.stringify({
-                        score: cleanScore,
-                        ship_type: cleanShipType,
-                        created_at: new Date().toISOString()
-                    })
-                });
-
-                if (!updateResponse.ok) {
-                    const message = await updateResponse.text();
-                    throw new Error(`Supabase PATCH ${updateResponse.status}: ${message}`);
-                }
-
-                rankingOnline = true;
-                rankingCache = null;
-                rankingCacheTime = 0;
-                return { ok: true, updated: true, bestScoreKept: false, oldScore };
-            }
-
-            // 初回登録。
-            const response = await fetch(SUPABASE_SCORES_URL, {
+            // 検証と「自己ベストのみ更新」はDB側の関数(submit_score)で行う。
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_score`, {
                 method: 'POST',
                 headers: {
                     apikey: SUPABASE_ANON_KEY,
                     Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-                    'Content-Type': 'application/json',
-                    Prefer: 'return=representation'
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    player_name: cleanName,
-                    score: cleanScore,
-                    ship_type: cleanShipType
+                    p_name: cleanName,
+                    p_score: cleanScore,
+                    p_ship_type: cleanShipType
                 })
             });
 
             if (!response.ok) {
                 const message = await response.text();
-                throw new Error(`Supabase POST ${response.status}: ${message}`);
+                throw new Error(`Supabase RPC ${response.status}: ${message}`);
             }
 
+            const data = await response.json();
             rankingOnline = true;
             rankingCache = null;
             rankingCacheTime = 0;
-            return { ok: true, updated: false, bestScoreKept: false };
+
+            if (data && data.status === 'kept') {
+                return { ok: true, updated: false, bestScoreKept: true, oldScore: Number(data.old_score) || 0 };
+            }
+            return { ok: true, updated: true, bestScoreKept: false };
         } catch (error) {
             console.error('Online score submission failed.', error);
             rankingOnline = false;
