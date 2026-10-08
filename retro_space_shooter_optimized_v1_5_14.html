@@ -838,10 +838,10 @@ function cycleDroneMode() {
 }
 
 // MACHINEGUN tuning
-const MG_SPREAD = 0.6;       // 発射角のばらつき(ラジアン、±)
+const MG_SPREAD = 0.8;       // 発射角のばらつき(ラジアン、±)
 const MG_LIFE = 34;          // 弾の寿命(フレーム)= 射程
 const MG_DAMAGE_MULT = 0.4;
-const MG_BURST_FRAMES = 75;  // 連射できる時間(約1.25秒)
+const MG_BURST_FRAMES = 150;  // 連射できる時間(約1.25秒)
 const MG_REST_FRAMES = 90;   // 連射後のクールダウン(約1.5秒。冷却短縮パッシブが効く)
 let mgBurst = MG_BURST_FRAMES;
 let mgRest = 0;
