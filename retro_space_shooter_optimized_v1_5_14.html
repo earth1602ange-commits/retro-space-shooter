@@ -1,0 +1,4285 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RETRO SPACE SHOOTER - 無料ブラウザシューティングゲーム</title>
+    <meta name="description"
+          content="無料で遊べるレトロ風ブラウザシューティングゲーム。高速編隊や60秒ごとに登場するボスを撃破してハイスコアを目指そう！">
+    <!-- RETRO SPACE SHOOTER VERSION: v1.5.14 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        /* ================================================================
+           STYLES
+           ================================================================ */
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body {
+            font-family: 'Press Start 2P', monospace;
+            background-color: #020205;
+            color: #fff;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            box-shadow: 0 0 40px rgba(0, 240, 255, 0.35);
+        }
+        .neon-text-blue {
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.9), 0 0 20px rgba(0, 240, 255, 0.6);
+        }
+        .neon-text-red {
+            text-shadow: 0 0 10px rgba(255, 0, 85, 0.9), 0 0 20px rgba(255, 0, 85, 0.6);
+        }
+        .neon-text-yellow {
+            text-shadow: 0 0 10px rgba(255, 220, 0, 0.9), 0 0 20px rgba(255, 220, 0, 0.6);
+        }
+        .neon-box {
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.5), inset 0 0 15px rgba(0, 240, 255, 0.25);
+            border: 2px solid #00f0ff;
+        }
+        .version-badge {
+            position: absolute;
+            right: 10px;
+            bottom: 8px;
+            z-index: 40;
+            padding: 4px 7px;
+            border: 1px solid rgba(0, 240, 255, 0.22);
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.38);
+            color: rgba(148, 163, 184, 0.72);
+            font-size: 8px;
+            line-height: 1;
+            letter-spacing: 0.08em;
+            pointer-events: none;
+        }
+
+        .crt-overlay {
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.3) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.04),
+                rgba(0, 255, 0, 0.015),
+                rgba(0, 0, 255, 0.04)
+            );
+            background-size: 100% 3px, 4px 100%;
+            pointer-events: none;
+        }
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(1000%); }
+        }
+        .crt-scanbar {
+             will-change: transform;
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 10px;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(0,240,255,0.08) 50%, rgba(255,255,255,0));
+            animation: scanline 8s linear infinite;
+            pointer-events: none;
+        }
+    
+        .pause-button {
+            pointer-events: auto;
+            min-width: 58px;
+            height: 30px;
+            padding: 0 8px;
+            border: 1px solid rgba(0, 240, 255, 0.65);
+            border-radius: 6px;
+            background: rgba(2, 8, 20, 0.86);
+            color: #67e8f9;
+            font-size: 8px;
+            letter-spacing: 0.08em;
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.16);
+        }
+        .pause-button:active {
+            transform: scale(0.96);
+            background: rgba(8, 48, 70, 0.95);
+        }
+
+    </style>
+</head>
+<body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
+
+    <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
+        <div class="version-badge" aria-label="Game version">v1.5.14</div>
+        <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
+        <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
+        <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
+
+        <div id="hud" class="absolute top-0 left-0 w-full p-4 flex justify-between items-start pointer-events-none text-xs md:text-sm hidden z-10">
+            <div class="flex flex-col gap-1">
+                <div class="text-cyan-400 font-bold">SCORE: <span id="score-val" class="text-white">000000</span></div>
+                <div class="text-slate-400 text-[10px]">HIGH : <span id="high-val" class="text-slate-200">000000</span></div>
+                <div class="text-purple-400 text-[10px] mt-0.5">STAGE: <span id="stage-val" class="text-yellow-300">1</span></div>
+            </div>
+
+            <div class="flex flex-col items-end gap-2">
+                <div class="flex items-center gap-2 pointer-events-auto">
+                    <div class="flex items-center gap-1">
+                        <span class="text-pink-500 mr-1 font-bold">HP:</span>
+                        <div id="lives-container" class="flex gap-1 text-xs md:text-sm">❤️❤️❤</div>
+                    </div>
+                    <button id="btn-pause" class="pause-button">PAUSE</button>
+                </div>
+                <div id="passive-status" class="text-[10px] text-slate-300 h-3"></div>
+            </div>
+        </div>
+
+        <div id="boss-hud" class="absolute top-14 left-1/2 transform -translate-x-1/2 w-3/4 max-w-xs flex flex-col items-center pointer-events-none hidden z-10">
+            <div class="flex justify-between w-full text-[10px] text-purple-300 font-bold mb-1">
+                <span class="neon-text-red">⚠️ BOSS FORTRESS</span>
+                <span id="boss-hp-text" class="text-white">100%</span>
+            </div>
+            <div class="w-full h-4 bg-slate-900/90 border-2 border-purple-500 rounded-full p-0.5 overflow-hidden shadow-lg shadow-purple-500/40">
+                <div id="boss-hp-bar" class="h-full bg-gradient-to-r from-red-600 via-pink-500 to-purple-400 rounded-full transition-all duration-75" style="width: 100%;"></div>
+            </div>
+        </div>
+
+
+        <div id="pause-screen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/72 backdrop-blur-[1px] pointer-events-auto hidden z-50">
+            <div class="text-cyan-300 text-3xl md:text-4xl font-bold tracking-[0.18em] neon-text-blue mb-3">PAUSED</div>
+            <div class="text-slate-400 text-[10px] mb-5">P / ESC で再開</div>
+            <button id="btn-resume" class="px-6 py-3 bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-bold rounded border border-cyan-300 shadow-[0_0_15px_rgba(0,240,255,.35)]">
+                RESUME
+            </button>
+            <button id="btn-pause-title" class="mt-3 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded border border-slate-400">
+                BACK TO TITLE
+            </button>
+        </div>
+
+        <div id="boss-warning" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none hidden z-20">
+            <div class="bg-red-950/90 border-y-4 border-red-600 w-full py-6 text-center animate-pulse shadow-2xl">
+                <p class="text-red-500 text-2xl md:text-4xl font-bold tracking-widest neon-text-red">⚠️ ALERT ⚠️</p>
+                <p class="text-yellow-400 text-xs md:text-sm mt-2 neon-text-yellow">BOSS FLEET DETECTED</p>
+            </div>
+        </div>
+
+        <div id="stage-up-banner" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none hidden z-20">
+            <div class="bg-purple-950/90 border-y-4 border-purple-500 w-full py-6 text-center shadow-2xl animate-bounce">
+                <p class="text-yellow-300 text-xl md:text-3xl font-bold tracking-widest neon-text-yellow">STAGE CLEAR!</p>
+                <p class="text-cyan-300 text-xs md:text-sm mt-2 neon-text-blue">ENEMY FORCES STRENGTHENED</p>
+                <p id="stage-up-bonus" class="text-yellow-200 text-[10px] md:text-xs mt-2"></p>
+            </div>
+        </div>
+
+        <div id="screen-select-ship" class="absolute inset-0 flex flex-col items-center justify-center bg-black/95 p-4 text-center z-40 hidden">
+            <h2 class="text-lg md:text-2xl text-cyan-400 mb-1 neon-text-blue tracking-wider">SELECT FIGHTER</h2>
+            <p class="text-[10px] md:text-xs text-slate-400 mb-4">出撃する機体を選択してください</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-lg px-2">
+                <button data-ship-type="0" class="group relative bg-slate-900/90 hover:bg-slate-800 border-2 border-cyan-400 rounded-xl p-3.5 flex flex-col items-start transition transform active:scale-95 shadow-lg shadow-cyan-500/20">
+                    <div class="w-full flex justify-between items-center mb-1">
+                        <span class="text-cyan-400 font-bold text-xs">TYPE-1: STANDARD</span>
+                        <span class="text-sm">🚀</span>
+                    </div>
+                    <div class="text-left text-slate-300 text-[9px] leading-relaxed">
+                        【万能高速型】高連射とバランスの取れた弾道。<br>初心者から上級者まで扱いやすい主力機。
+                    </div>
+                </button>
+
+                <button data-ship-type="1" class="group relative bg-slate-900/90 hover:bg-slate-800 border-2 border-red-500 rounded-xl p-3.5 flex flex-col items-start transition transform active:scale-95 shadow-lg shadow-red-500/20">
+                    <div class="w-full flex justify-between items-center mb-1">
+                        <span class="text-red-400 font-bold text-xs">TYPE-2: CRESCENT BLADE</span>
+                        <span class="text-sm">🌙</span>
+                    </div>
+                    <div class="text-left text-slate-300 text-[9px] leading-relaxed">
+                        【3連バースト斬撃型】三日月ブレードを短時間に連射。<br>中央ブレードだけが敵弾をガードできる。
+                    </div>
+                </button>
+
+                <button data-ship-type="2" class="group relative bg-slate-900/90 hover:bg-slate-800 border-2 border-amber-400 rounded-xl p-3.5 flex flex-col items-start transition transform active:scale-95 shadow-lg shadow-amber-500/20">
+                    <div class="w-full flex justify-between items-center mb-1">
+                        <span class="text-amber-400 font-bold text-xs">TYPE-3: HEAVY SHOTGUN</span>
+                        <span class="text-sm">💥</span>
+                    </div>
+                    <div class="text-left text-slate-300 text-[9px] leading-relaxed">
+                        【高密度散弾型】大量の散弾を前方へ高密度発射。<br>長射程＋中央弾の強化クリティカルで大型敵にも強い重装機。
+                    </div>
+                </button>
+
+                <button data-ship-type="3" class="group relative bg-slate-900/90 hover:bg-slate-800 border-2 border-purple-400 rounded-xl p-3.5 flex flex-col items-start transition transform active:scale-95 shadow-lg shadow-purple-500/20">
+                    <div class="w-full flex justify-between items-center mb-1">
+                        <span class="text-purple-400 font-bold text-xs">TYPE-4: MISSILE POD</span>
+                        <span class="text-sm">🛰️</span>
+                    </div>
+                    <div class="text-left text-slate-300 text-[9px] leading-relaxed">
+                        【全自動追尾型】敵を自動で捕捉し追撃する。<br>回避に専念しながら安全に敵を殲滅。
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <div id="screen-upgrade" class="absolute inset-0 flex flex-col items-center justify-center bg-black/92 p-4 text-center z-40 hidden">
+            <h2 class="text-xl md:text-3xl text-yellow-400 mb-1 neon-text-yellow tracking-wider">SYSTEM UPGRADE</h2>
+            <p class="text-[10px] md:text-xs text-cyan-300 mb-4">スコア報酬：強化モジュールを選択してください</p>
+
+            <div class="grid grid-cols-2 md:grid-cols-2 gap-3 w-full max-w-lg px-2">
+                <button id="btn-upg-0" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-cyan-400 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-cyan-500/20 disabled:opacity-40 disabled:pointer-events-none">
+    <div class="w-full flex justify-between items-center mb-1">
+        <span id="upgrade-icon-0" class="text-xl">⚡</span>
+        <span id="badge-upg-0" class="text-[9px] bg-cyan-950 text-cyan-300 border border-cyan-500 px-1.5 py-0.5 rounded">LV.1/4</span>
+    </div>
+    <div id="title-upg-0" class="w-full text-cyan-400 font-bold text-xs mb-0.5">射撃パワー</div>
+    <div id="desc-upg-0" class="w-full text-slate-300 text-[9px] leading-tight mb-2">弾数・範囲 ＆ 威力UP</div>
+    <div id="status-upg-0" class="w-full text-center text-[10px] text-cyan-300 group-hover:text-white font-bold py-1 bg-cyan-900/60 rounded">選択する</div>
+</button>
+
+<button id="btn-upg-1" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-pink-500 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-pink-500/20 disabled:opacity-40 disabled:pointer-events-none">
+    <div class="w-full flex justify-between items-center mb-1">
+        <span id="upgrade-icon-1" class="text-xl">🔥</span>
+        <span id="badge-upg-1" class="text-[9px] bg-pink-950 text-pink-300 border border-pink-500 px-1.5 py-0.5 rounded">LV.1/4</span>
+    </div>
+    <div id="title-upg-1" class="w-full text-pink-400 font-bold text-xs mb-0.5">発射レート</div>
+    <div id="desc-upg-1" class="w-full text-slate-300 text-[9px] leading-tight mb-2">連射速度を限界まで高速化</div>
+    <div id="status-upg-1" class="w-full text-center text-[10px] text-pink-300 group-hover:text-white font-bold py-1 bg-pink-900/60 rounded">選択する</div>
+</button>
+
+<button id="btn-upg-2" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-yellow-400 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-yellow-500/20 disabled:opacity-40 disabled:pointer-events-none">
+    <div class="w-full flex justify-between items-center mb-1">
+        <span id="upgrade-icon-2" class="text-xl">🎯</span>
+        <span id="badge-upg-2" class="text-[9px] bg-yellow-950 text-yellow-300 border border-yellow-500 px-1.5 py-0.5 rounded">LV.0/5</span>
+    </div>
+    <div id="title-upg-2" class="w-full text-yellow-400 font-bold text-xs mb-0.5">クリティカル</div>
+    <div id="desc-upg-2" class="w-full text-slate-300 text-[9px] leading-tight mb-2">会心率+5% (ダメージ1.5倍)</div>
+    <div id="status-upg-2" class="w-full text-center text-[10px] text-yellow-300 group-hover:text-white font-bold py-1 bg-yellow-900/60 rounded">選択する</div>
+</button>
+
+<button id="btn-upg-3" class="group relative bg-slate-900 hover:bg-slate-800 border-2 border-green-400 rounded-xl p-3.5 flex flex-col items-center justify-between text-left transition transform active:scale-95 shadow-lg shadow-green-500/20">
+    <div class="w-full flex justify-between items-center mb-1">
+        <span id="upgrade-icon-3" class="text-xl">💖</span>
+        <span id="badge-upg-3" class="text-[9px] bg-green-950 text-green-300 border border-green-500 px-1.5 py-0.5 rounded">UP:0/3</span>
+    </div>
+    <div id="title-upg-3" class="w-full text-green-400 font-bold text-xs mb-0.5">最大HP＆全回復</div>
+    <div id="desc-upg-3" class="w-full text-slate-300 text-[9px] leading-tight mb-2">最大HP+1 ＆ 体力完全回復</div>
+    <div id="status-upg-3" class="w-full text-center text-[10px] text-green-300 group-hover:text-white font-bold py-1 bg-green-900/60 rounded">選択する</div>
+</button>
+            </div>
+
+            <button id="btn-reroll" class="mt-4 px-5 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-200 text-xs font-bold rounded border border-cyan-400 disabled:opacity-40 disabled:pointer-events-none">
+                🔄 REROLL (1)
+            </button>
+        </div>
+
+        <div id="screen-title" class="absolute inset-0 flex flex-col items-center justify-center bg-black/88 p-6 text-center z-30">
+            <h1 class="text-2xl md:text-4xl text-cyan-400 mb-2 neon-text-blue tracking-wider">RETRO SPACE</h1>
+            <h2 class="text-xl md:text-3xl text-pink-500 mb-6 neon-text-red">SHOOTER EX</h2>
+            
+            <div class="bg-slate-900/90 p-4 rounded-xl border border-cyan-500/40 mb-6 text-left text-[10px] md:text-xs text-slate-300 space-y-2 max-w-xs shadow-xl">
+                <p class="text-cyan-400 font-bold mb-1 border-b border-cyan-500/30 pb-1">[ 操作 & ルール ]</p>
+                <p>• 移動 : WASD / 矢印キー / タッチドラッグ</p>
+                <p>• 発射 : スペースキー / [FIRE]ボタン</p>
+                <p class="text-yellow-400 pt-1 border-t border-slate-700/60 mt-1">• スコア達成ごと : システム強化選択！(リロール1回可)</p>
+                <p class="text-purple-400">• 60秒毎 : ボス艦隊出現！</p>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 items-center">
+                <button id="btn-start" class="px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-sm md:text-base rounded-lg transition transform active:scale-95 neon-box">
+                    GAME START
+                </button>
+                <button id="btn-title-ranking" class="px-6 py-3 bg-slate-900/90 hover:bg-slate-800 text-cyan-300 font-bold text-xs border border-cyan-500/50 rounded-lg transition active:scale-95">
+                    RANKING
+                </button>
+            </div>
+        </div>
+
+        <div id="screen-gameover" class="absolute inset-0 flex flex-col items-center justify-center bg-black/92 p-6 text-center z-30 hidden">
+            <h2 class="text-3xl md:text-5xl text-red-500 mb-4 neon-text-red tracking-widest">GAME OVER</h2>
+            <div class="text-sm md:text-lg text-slate-300 mb-2">FINAL SCORE</div>
+            <div id="final-score" class="text-2xl md:text-3xl text-cyan-400 mb-6 neon-text-blue">000000</div>
+
+            <div class="w-full max-w-xs bg-slate-950/95 border border-cyan-400/60 rounded-xl p-4 mb-6 shadow-lg shadow-cyan-500/10">
+                <div class="text-cyan-300 font-bold text-sm tracking-wider mb-1">RANKING ENTRY</div>
+                <div class="text-[10px] text-slate-400 mb-3">名前を入力してスコアを登録・更新</div>
+                <input id="ranking-name-input" type="text" maxlength="10" autocomplete="off" spellcheck="false" placeholder="PLAYER" class="w-full box-border bg-slate-900 border border-slate-600 focus:border-cyan-400 outline-none rounded-lg px-3 py-2 text-center text-white text-sm tracking-wider mb-2">
+                <div id="ranking-submit-status" class="min-h-[16px] text-[10px] text-red-400 mb-2"></div>
+                <button id="btn-submit-ranking" class="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs rounded-lg transition active:scale-95 neon-box">
+                    SUBMIT SCORE
+                </button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+                <button id="btn-restart" class="flex-1 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs md:text-sm rounded-lg transition transform active:scale-95 neon-box">
+                    TRY AGAIN
+                </button>
+                <button id="btn-title" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs md:text-sm border border-slate-600 rounded-lg transition transform active:scale-95">
+                    TITLE
+                </button>
+            </div>
+        </div>
+
+        <div id="screen-ranking" class="absolute inset-0 flex flex-col items-center justify-center bg-black/92 p-5 text-center z-30 hidden">
+            <div class="w-full max-w-sm bg-slate-950/95 border border-cyan-400/60 rounded-xl p-5 shadow-lg shadow-cyan-500/10">
+                <h2 class="text-2xl md:text-3xl text-cyan-300 mb-1 neon-text-blue tracking-widest">RANKING</h2>
+                <div data-ranking-status class="text-[10px] text-slate-500 mb-4">ONLINE SCORE BOARD</div>
+                <div id="ranking-list" class="space-y-1.5 mb-5"></div>
+                <button id="btn-ranking-close" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-600 rounded-lg transition active:scale-95">
+                    BACK TO TITLE
+                </button>
+            </div>
+        </div>
+
+        <div id="touch-controls" class="absolute bottom-6 left-0 right-0 px-6 flex justify-between items-center pointer-events-none md:hidden z-20">
+            <div class="text-[9px] text-slate-400 bg-slate-900/80 p-2.5 rounded-lg border border-slate-700">
+                画面ドラッグで移動
+            </div>
+
+            <div class="pointer-events-auto flex items-center gap-3">
+                <button id="btn-touch-mode" class="hidden w-14 h-14 bg-purple-500/30 border-2 border-purple-400 rounded-full flex items-center justify-center text-[10px] font-bold text-purple-300 active:bg-purple-500/80 active:scale-95 transition">
+                    ORBIT
+                </button>
+                <button id="btn-touch-fire" class="w-16 h-16 bg-cyan-500/30 border-2 border-cyan-400 rounded-full flex items-center justify-center text-xs font-bold text-cyan-300 active:bg-cyan-500/80 shadow-lg shadow-cyan-500/30 active:scale-95 transition">
+                    FIRE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    /* ================================================================
+       GAME CODE
+       01. Audio
+       02. Canvas / DOM cache
+       03. Constants / state
+       04. Entities / object pools
+       05. Game flow / UI
+       06. Collision / update / render
+       07. Input / events / boot
+       ================================================================ */
+
+    // ---------------------------------------------------------------
+    // 01. Audio
+    // ---------------------------------------------------------------
+    class SoundFX {
+        constructor() {
+            this.ctx = null;
+            this.noiseBuffers = {};
+            this.muted = false;
+        }
+
+        init() {
+            if (!this.ctx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioCtx();
+                this.preBufferNoise('small', 0.18);
+                this.preBufferNoise('large', 0.45);
+            }
+            if (this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+        }
+
+        preBufferNoise(key, duration) {
+            const bufferSize = Math.ceil(this.ctx.sampleRate * duration);
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            this.noiseBuffers[key] = buffer;
+        }
+
+        playLaser() {
+            if (!this.ctx || this.muted) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.07);
+            gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.07);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.07);
+        }
+
+        playExplosion(isLarge = false) {
+            if (!this.ctx || this.muted) return;
+            const dur = isLarge ? 0.45 : 0.18;
+            const buffer = this.noiseBuffers[isLarge ? 'large' : 'small'];
+            if (!buffer) return;
+
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(isLarge ? 300 : 700, this.ctx.currentTime);
+            filter.frequency.linearRampToValueAtTime(30, this.ctx.currentTime + dur);
+
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(isLarge ? 0.3 : 0.15, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+            noise.start();
+        }
+
+        playWarning() {
+            if (!this.ctx || this.muted) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+            osc.frequency.setValueAtTime(880, this.ctx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.3);
+        }
+
+        playUpgrade() {
+            if (!this.ctx || this.muted) return;
+            const notes = [523.25, 659.25, 783.99, 1046.50];
+            notes.forEach((freq, idx) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.07);
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime + idx * 0.07);
+                gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.07 + 0.1);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(this.ctx.currentTime + idx * 0.07);
+                osc.stop(this.ctx.currentTime + idx * 0.07 + 0.1);
+            });
+        }
+    }
+
+    const sfx = new SoundFX();
+
+    // ---------------------------------------------------------------
+    // 02. Canvas / DOM cache
+    // ---------------------------------------------------------------
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    ctx.imageSmoothingEnabled = false;
+
+    const GAME_WIDTH = 480;
+    const GAME_HEIGHT = 640;
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
+
+    // Cached DOM references: avoid repeated getElementById/classList work in the hot loop.
+    const ui = {
+        score: document.getElementById('score-val'),
+        high: document.getElementById('high-val'),
+        stage: document.getElementById('stage-val'),
+        lives: document.getElementById('lives-container'),
+        bossHud: document.getElementById('boss-hud'),
+        bossHpBar: document.getElementById('boss-hp-bar'),
+        bossHpText: document.getElementById('boss-hp-text'),
+        bossWarning: document.getElementById('boss-warning'),
+        pauseScreen: document.getElementById('pause-screen'),
+        pauseButton: document.getElementById('btn-pause'),
+        resumeButton: document.getElementById('btn-resume'),
+        passiveStatus: document.getElementById('passive-status'),
+        rerollButton: document.getElementById('btn-reroll'),
+        stageBonus: document.getElementById('stage-up-bonus'),
+        pauseTitleButton: document.getElementById('btn-pause-title'),
+        stageBanner: document.getElementById('stage-up-banner'),
+        title: document.getElementById('screen-title'),
+        gameover: document.getElementById('screen-gameover'),
+        upgrade: document.getElementById('screen-upgrade'),
+        shipSelect: document.getElementById('screen-select-ship'),
+        hud: document.getElementById('hud'),
+        finalScore: document.getElementById('final-score'),
+        ranking: document.getElementById('screen-ranking'),
+        rankingList: document.getElementById('ranking-list'),
+        rankingNameInput: document.getElementById('ranking-name-input'),
+        rankingSubmitStatus: document.getElementById('ranking-submit-status'),
+        submitRanking: document.getElementById('btn-submit-ranking'),
+        titleRankingButton: document.getElementById('btn-title-ranking'),
+        rankingCloseButton: document.getElementById('btn-ranking-close'),
+
+        // Upgrade controls
+upgradeSlots: [0, 1, 2, 3].map(index => ({
+    button: document.getElementById(`btn-upg-${index}`),
+    icon: document.getElementById(`upgrade-icon-${index}`),
+    badge: document.getElementById(`badge-upg-${index}`),
+    title: document.getElementById(`title-upg-${index}`),
+    desc: document.getElementById(`desc-upg-${index}`),
+    status: document.getElementById(`status-upg-${index}`)
+})),
+
+upgradeButtons: {
+    shot: document.getElementById('btn-upg-0'),
+    rate: document.getElementById('btn-upg-1'),
+    crit: document.getElementById('btn-upg-2'),
+    hp: document.getElementById('btn-upg-3')
+},
+        startButton: document.getElementById('btn-start'),
+        restartButton: document.getElementById('btn-restart'),
+        titleButton: document.getElementById('btn-title'),
+        touchFireButton: document.getElementById('btn-touch-fire')
+    };
+
+    // ---------------------------------------------------------------
+    // 03. Constants / game state
+    // ---------------------------------------------------------------
+
+    // HUD is visual UI, not gameplay state. Updating it every frame wastes layout/DOM time.
+    let hudFrame = 0;
+    let renderFrame = 0;
+    let lastHudScore = -1;
+    let lastHudLives = -1;
+    let lastHudStage = -1;
+    let lastBossHpPercent = -1;
+
+    const STATE_TITLE = 0;
+    const STATE_PLAYING = 1;
+    const STATE_GAMEOVER = 2;
+    const STATE_UPGRADE = 3;
+    const STATE_PAUSED = 4;
+    let gameState = STATE_TITLE;
+
+    let selectedShipType = 0;
+    const SHIP_NAMES = [
+        'TYPE-1: STANDARD',
+        'TYPE-2: CRESCENT BLADE',
+        'TYPE-3: HEAVY SHOTGUN',
+        'TYPE-4: MISSILE POD'
+    ];
+    const SHIP_EMOJIS = ['🚀', '🌙', '💥', '🛰️'];
+    let score = 0;
+    let highScore = Number(localStorage.getItem('retro_space_high_opt') || 0);
+    // ===============================================================
+    // ONLINE RANKING / SUPABASE
+    // anon / publishable key is safe to use in a browser when RLS is configured.
+    // NEVER put a service_role / secret key here.
+    // ===============================================================
+    const SUPABASE_URL = 'https://uhyicuqrmmfzumtqjxem.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVoeWljdXFybW1menVtdHFqeGVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDM2MTQsImV4cCI6MjEwNjY3OTYxNH0.JdNkDDQZPDBiCWIPXuQQU6cmJATGaTZDy_5-nmhqjdo';
+    const SUPABASE_SCORES_URL = `${SUPABASE_URL}/rest/v1/scores`;
+    const RANKING_KEY = 'retro_space_ranking_v1'; // local fallback/cache only
+    const RANKING_LIMIT = 10;
+    let rankingSubmitted = false;
+    let rankingOnline = true;
+    let rankingCacheTime = 0;
+    let rankingCache = null;
+    const RANKING_CACHE_TTL = 10000;
+    // アップグレード必要スコア: 2000 → 4000 → 6000 ... → 20000(上限) → 以降ずっと20000
+    const UPGRADE_STEP_BASE = 2000;
+    const UPGRADE_STEP_MAX = 20000;
+    let upgradeCount = 0;
+    function getUpgradeStep() {
+        return Math.min(UPGRADE_STEP_BASE * (upgradeCount + 1), UPGRADE_STEP_MAX);
+    }
+    let nextUpgradeScore = UPGRADE_STEP_BASE;
+    let gameElapsedMs = 0;
+    let lastFrameTime = performance.now();
+    let bossIntervalMs = 60000;
+    // 敵の出現量(従来: 間隔35フレーム / 編隊7体)
+    const ENEMY_SPAWN_INTERVAL_FRAMES = 27;   // 小さいほど通常敵が多く出る
+    const FORMATION_ENEMY_COUNT = 9;          // 高速編隊1回あたりの数(ステージ1)
+    // ステージ(=ボス撃破数+1)が進むごとの敵の増加
+    // ミサイル艦(type 6)と、そのミサイル(type 7)
+    const MISSILE_SPEED = 3.6;          // ミサイルの速さ
+    const MISSILE_TURN_RATE = 0.04;     // 1フレームあたりの最大旋回角(小さいほど避けやすい)
+    const MISSILE_LIFE_FRAMES = 260;    // ミサイルが自爆するまでの時間
+    const MISSILE_SHIP_REPLACE_CHANCE = 0.25; // ステージ2以降、通常敵の一部がミサイル艦になる割合
+    const ENEMY_SPAWN_MIN_INTERVAL_FRAMES = 12;   // 通常敵の出現間隔の下限
+    const ENEMY_SPAWN_STEP_PER_STAGE = 2;         // 1ステージごとに短くなる間隔(フレーム)
+    const FORMATION_COUNT_PER_STAGE = 1;          // 1ステージごとに増える高速編隊の数
+    const FORMATION_ENEMY_MAX = 15;               // 高速編隊の数の上限
+    function getEnemySpawnInterval() {
+        return Math.max(ENEMY_SPAWN_MIN_INTERVAL_FRAMES, ENEMY_SPAWN_INTERVAL_FRAMES - bossLevel * ENEMY_SPAWN_STEP_PER_STAGE);
+    }
+    let formationSpawnTimer = 0;
+    let formationDirection = -1;
+    let bossLevel = 0;
+    // ボス撃破ごとの敵HP上昇倍率(1.0で従来通り)。上げるほど撃破後の敵が硬くなる。
+    const ENEMY_LEVEL_SCALE = 1.3;
+    // 4番機(shipType 3)ミサイルの最高速度(従来は4.2)
+    const SHIP4_MISSILE_MAX_SPEED = 7.5;
+    // 4番機ミサイルの旋回力(ラジアン/フレーム)。大きいほど小回りが利く。
+    const SHIP4_MISSILE_TURN_RATE = 0.10;
+    // HOMING武器の連射設定
+    const HOMING_BURST_COUNT = 4;      // 1回のバーストで撃つ数
+    const HOMING_SHOT_INTERVAL = 7;    // 1発ごとの間隔(フレーム)
+    let homingBurstRemaining = 0;
+    let homingShotTimer = 0;
+    let homingSideToggle = false;
+    // ボス撃破タイムボーナス: 登場演出が終わって攻撃可能になってからの経過時間で計算。
+    // ボーナス = (BOSS_TIME_BONUS_PAR_SEC - 撃破秒数) × BOSS_TIME_BONUS_PER_SEC (0未満は0)
+    const BOSS_TIME_BONUS_PAR_SEC = 60;
+    const BOSS_TIME_BONUS_PER_SEC = 100;
+    let bossFightMs = 0;
+    // ===== PASSIVE SKILLS =====
+    const PASSIVE_OFFER_CHANCE = 0.5;            // アップグレード画面にパッシブが1枠出る確率
+    const PASSIVE_COOLDOWN_CUT_PER_LV = 0.12;    // 武器クールダウン短縮(1Lvあたり)
+    const KILL_CRIT_BONUS = 0.25;                // 撃破後の会心率アップ量
+    const KILL_CRIT_DURATION_MS = 8000;          // 1スタックの持続時間
+    const KILL_CRIT_MAX_STACKS = 4;              // 重複できる数(撃破ごとに1スタック)
+    const LOW_HP_POWER_MAX = 0.6;                // HP残りわずかのとき最大で攻撃力+60%
+    const SHIELD_INTERVAL_MS = 30000;            // シールド再取得までの時間
+    const passiveLevels = { cooldown: 0, killCrit: 0, lowHpPower: 0, bossHeal: 0, shield: 0 };
+    const PASSIVE_DEFS = {
+        cooldown: {
+            icon: '⏱️', title: '武器クールダウン短縮', maxLevel: 3,
+            desc: () => `全武器のクールダウン-${Math.round(PASSIVE_COOLDOWN_CUT_PER_LV * 100)}%`
+        },
+        killCrit: {
+            icon: '💥', title: 'キルラッシュ', maxLevel: 1,
+            desc: () => `敵を倒すと${KILL_CRIT_DURATION_MS / 1000}秒間 会心率+${Math.round(KILL_CRIT_BONUS * 100)}%(最大${KILL_CRIT_MAX_STACKS}重)`
+        },
+        lowHpPower: {
+            icon: '🩸', title: '背水の陣', maxLevel: 1,
+            desc: () => `HPが減るほど攻撃力UP(最大+${Math.round(LOW_HP_POWER_MAX * 100)}%)`
+        },
+        bossHeal: {
+            icon: '💊', title: 'ボスの残骸', maxLevel: 1,
+            desc: () => 'ボスを倒すたびにHPを1回復'
+        },
+        shield: {
+            icon: '🛡️', title: 'エネルギーシールド', maxLevel: 1,
+            desc: () => `${SHIELD_INTERVAL_MS / 1000}秒ごとにシールド獲得(1回の被弾を防ぐ)`
+        }
+    };
+    const killCritTimers = [];   // 各スタックの残り時間(ms)
+    let lastPassiveText = '';
+    let shieldTimerMs = 0;
+
+    function weaponCooldown(id) {
+        const cut = Math.min(0.6, passiveLevels.cooldown * PASSIVE_COOLDOWN_CUT_PER_LV);
+        return Math.max(1, Math.round(WEAPON_DEFS[id].cooldown * (1 - cut)));
+    }
+    function getCritChanceBonus() {
+        return killCritTimers.length * KILL_CRIT_BONUS;
+    }
+    function getLowHpPowerMultiplier() {
+        if (passiveLevels.lowHpPower <= 0) return 1;
+        const ratio = Math.max(0, player.lives) / Math.max(1, player.maxLives);
+        return 1 + LOW_HP_POWER_MAX * (1 - ratio);
+    }
+    // 会心倍率(1段あたり)。会心率が100%を超えると、確定分の段数ぶん重ねてかかる。
+    // CRIT_MULT_NORMAL: 通常弾 / CRIT_MULT_SPECIAL: 強化弾(TYPE-3中央弾) / CRIT_MULT_SNIPER: SNIPER
+    const CRIT_MULT_NORMAL = 1.5;
+    const CRIT_MULT_SPECIAL = 2;
+    const CRIT_MULT_SNIPER = 3;
+    // 会心率の倍率。CRIT_RATE_MULT_SPECIAL: 強化弾の会心率倍率(基本の会心率部分にかかる)
+    // CRIT_RATE_MULT_SNIPER: SNIPERの会心率倍率(最終的な会心率にかかる)
+    const CRIT_RATE_MULT_SPECIAL = 1.5;
+    const CRIT_RATE_MULT_SNIPER = 2;
+    function bulletCritMult(bullet) {
+        return (bullet.critDamageMultiplier || 1) > 1 ? CRIT_MULT_SPECIAL : CRIT_MULT_NORMAL;
+    }
+    // 会心判定。chance=1.25 なら確定で1段(×倍率)、さらに25%でもう1段(×倍率)。
+    // critMult は1段あたりの倍率。
+    // 戻り値: { tiers: 発動した段数, mult: 総合倍率 }
+    function rollCrit(chance, critMult) {
+        const guaranteed = Math.floor(chance);
+        const tiers = guaranteed + (Math.random() < chance - guaranteed ? 1 : 0);
+        return { tiers, mult: Math.pow(critMult, tiers) };
+    }
+    function onEnemyKilled() {
+        if (passiveLevels.killCrit <= 0) return;
+        if (killCritTimers.length < KILL_CRIT_MAX_STACKS) {
+            killCritTimers.push(KILL_CRIT_DURATION_MS);
+        } else {
+            // 上限なら、残り時間が最も短いスタックを更新して延長する
+            let minIdx = 0;
+            for (let i = 1; i < killCritTimers.length; i++) {
+                if (killCritTimers[i] < killCritTimers[minIdx]) minIdx = i;
+            }
+            killCritTimers[minIdx] = KILL_CRIT_DURATION_MS;
+        }
+    }
+    function resetPassives() {
+        for (const k of Object.keys(passiveLevels)) passiveLevels[k] = 0;
+        killCritTimers.length = 0;
+        shieldTimerMs = 0;
+    }
+
+    let isBossActive = false;
+    let bossWarningTimer = 0;
+    let stageUpTimer = 0;
+
+    let shotPowerLevel = 1;
+    let fireRateLevel = 1;
+    let critLevel = 0;
+    let hpUpgradesCount = 0;
+// ===== WEAPON SYSTEM =====
+const MAX_WEAPONS = 5;
+const WEAPON_OFFER_CHANCE = 0.40;
+
+const ownedWeapons = [];
+// 武器所持判定は毎フレーム何度も行われるため、配列検索ではなくフラグを使う。
+const weaponOwned = Object.create(null);
+function hasWeapon(id) { return weaponOwned[id] === true; }
+function clearWeaponFlags() {
+    for (const key of Object.keys(weaponOwned)) weaponOwned[key] = false;
+}
+const currentUpgradeOptions = [null, null, null, null];
+const WEAPON_DEFS = {
+    drill: {
+        name: 'DRILL',
+        icon: '🔩',
+        title: 'DRILL',
+        desc: '機体左右から巨大ドリル弾を2発発射。高火力の直進攻撃。',
+        theme: 'cyan',
+        cooldown: 72
+    },
+
+    electro: {
+        name: 'ELECTRO',
+        icon: '⚡',
+        title: 'ELECTRO',
+        desc: '近くの敵に電撃を放ち、最大4体へ連鎖。射程は短め。同じ敵には1イベント中1回だけ命中。',
+        theme: 'purple',
+        cooldown: 66
+    },
+
+    wiper: {
+        name: 'WIPER',
+        icon: '🧹',
+        title: 'WIPER',
+        desc: '前方をワイパー状に薙ぎ払い、敵を攻撃しながら敵弾も防ぐ。',
+        theme: 'green',
+        cooldown: 0
+    },
+
+    homing: {
+        name: 'HOMING',
+        icon: '🎯',
+        title: 'HOMING',
+        desc: '左右交互に4連射する追尾弾。最初に狙った敵を追い、倒れたら次の敵へ。途中で各3発に分裂する。',
+        theme: 'orange',
+        cooldown: 120
+    },
+
+    tron: {
+        name: 'TRON',
+        icon: '🏍️',
+        title: 'TRON',
+        desc: '自機の通った軌跡が光の壁になり、触れた敵にダメージ。壁は約4秒残る。持っている間は自機の移動速度も上がる。',
+        theme: 'cyan',
+        cooldown: 0
+    },
+
+    laser: {
+        name: 'LASER',
+        icon: '🔦',
+        title: 'LASER',
+        desc: 'ランダムな向きに光線を2本発射。画面の壁で最大3回反射し、約0.5秒残って触れた敵にダメージ。',
+        theme: 'red',
+        cooldown: 100
+    },
+
+    sniper: {
+        name: 'SNIPER',
+        icon: '🔭',
+        title: 'SNIPER',
+        desc: '最もHPの高い敵(ボスがいればそのパーツ)を約1秒かけて狙い撃つ。弾は貫通し、射線上の敵すべてに大ダメージ。',
+        theme: 'yellow',
+        cooldown: 150
+    },
+
+    machinegun: {
+        name: 'MACHINEGUN',
+        icon: '🔫',
+        title: 'MACHINEGUN',
+        desc: '機体の両側から小さな弾を超高速でばらまく。拡散は広く、射程は中程度。',
+        theme: 'yellow',
+        cooldown: 5
+    },
+
+    drone: {
+        name: 'DRONE',
+        icon: '🛸',
+        title: 'DRONE',
+        desc: '前方へ射撃するドローン。強化するごとに1機増える(最大3機)。追従方法は E キー / MODE ボタンで切り替え(周回・軌跡をなぞる・左右に並ぶ)。',
+        theme: 'purple',
+        cooldown: 36,
+        maxLevel: 3
+    }
+};
+
+// 武器レベル(maxLevel未指定の武器は1回取得でMAX)
+const weaponLevels = {};
+const weaponMaxLevel = id => (WEAPON_DEFS[id] && WEAPON_DEFS[id].maxLevel) || 1;
+
+// DRONE tuning: 追従方法 0=周回(ORBIT) 1=軌跡をなぞる(TRAIL) 2=左右に並ぶ(WING)
+const DRONE_MODE_NAMES = ['ORBIT 周回', 'TRAIL 追従', 'WING 左右'];
+const DRONE_COLORS = ['#c084fc', '#4ade80', '#fb923c'];
+const DRONE_DAMAGE_MULT = 0.8;
+const ORBIT_RADIUS = 46;
+const ORBIT_SPEED = 0.07;
+const TRAIL_GAP_FRAMES = 12;
+const WING_OFFSETS = [
+    [{ dx: 44, dy: 8 }],
+    [{ dx: -44, dy: 8 }, { dx: 44, dy: 8 }],
+    [{ dx: -60, dy: 8 }, { dx: 60, dy: 8 }, { dx: 0, dy: 38 }]
+];
+const dronePos = [];
+const playerPath = [];
+let orbitAngle = 0;
+let droneMode = 0;
+
+function updateDroneButton() {
+    const btn = document.getElementById('btn-touch-mode');
+    if (!btn) return;
+    btn.classList.toggle('hidden', !hasWeapon('drone'));
+    btn.textContent = DRONE_MODE_NAMES[droneMode].split(' ')[0];
+}
+function cycleDroneMode() {
+    if (!hasWeapon('drone') || gameState !== STATE_PLAYING) return;
+    droneMode = (droneMode + 1) % DRONE_MODE_NAMES.length;
+    updateDroneButton();
+}
+
+// MACHINEGUN tuning
+const MG_SPREAD = 0.6;       // 発射角のばらつき(ラジアン、±)
+const MG_LIFE = 34;          // 弾の寿命(フレーム)= 射程
+const MG_DAMAGE_MULT = 0.4;
+const MG_BURST_FRAMES = 75;  // 連射できる時間(約1.25秒)
+const MG_REST_FRAMES = 90;   // 連射後のクールダウン(約1.5秒。冷却短縮パッシブが効く)
+let mgBurst = MG_BURST_FRAMES;
+let mgRest = 0;
+function mgRestFrames() {
+    const cut = Math.min(0.6, passiveLevels.cooldown * PASSIVE_COOLDOWN_CUT_PER_LV);
+    return Math.max(1, Math.round(MG_REST_FRAMES * (1 - cut)));
+}
+
+const weaponTimers = {
+    drill: 0,
+    electro: 0,
+    homing: 0,
+    laser: 0,
+    sniper: 0,
+    machinegun: 0,
+    drone: 0
+};
+
+// WIPER tuning: 左から右へ一定速度で動く縦棒
+const WIPER_REACH = 37.5;
+const WIPER_X_MIN = -70;
+const WIPER_X_MAX = 70;
+const WIPER_SPEED = 7.5;
+
+let wiperX = WIPER_X_MIN;
+
+const wiperHitTimers = new Map();
+
+// TRON tuning
+// TRON_TRAIL_LIFE: 軌跡が残るフレーム数(60fps換算で約4秒)
+// TRON_SPEED_MULT: TRON所持中の移動速度倍率(キー操作)
+// TRON_TOUCH_FOLLOW: TRON所持中のタッチ追従率(通常は0.32)
+// TRON_HIT_INTERVAL: 同じ敵への連続ヒット間隔(フレーム)
+const TRON_TRAIL_LIFE = 240;
+const TRON_SPEED_MULT = 1.25;
+const TRON_TOUCH_FOLLOW = 0.40;
+const TRON_HIT_INTERVAL = 10;
+const TRON_WALL_HALF_WIDTH = 5;
+const tronTrail = [];
+const tronHitTimers = new Map();
+
+// LASER tuning
+// LASER_BEAMS: 1回の発射で出る光線の本数
+// LASER_SPREAD: 真上を中心にした発射角の振れ幅(ラジアン、±)
+// LASER_MAX_BOUNCES: 壁での最大反射回数
+// LASER_MAX_LENGTH: 光線の総延長(px)
+// LASER_LIFE: 光線が残るフレーム数
+// LASER_HIT_INTERVAL: 同じ標的への連続ヒット間隔(フレーム)
+const LASER_BEAMS = 2;
+const LASER_SPREAD = Math.PI * 80 / 180;
+const LASER_MAX_BOUNCES = 3;
+const LASER_MAX_LENGTH = 1400;
+const LASER_LIFE = 30;
+const LASER_HIT_INTERVAL = 10;
+const LASER_HALF_WIDTH = 4;
+const laserBeams = [];
+
+// SNIPER tuning
+// SNIPER_AIM_FRAMES: 狙いを定めるフレーム数(約1秒)。この間、標的を追尾して予告線を出す。
+// SNIPER_DAMAGE_MULT: ショット威力に対するダメージ倍率(会心・背水の陣も乗る)。
+// SNIPER_FLASH_FRAMES: 発射後に射線が残るフレーム数。
+// 冷却時間は WEAPON_DEFS.sniper.cooldown。
+const SNIPER_AIM_FRAMES = 60;
+const SNIPER_DAMAGE_MULT = 12;
+const SNIPER_FLASH_FRAMES = 14;
+const SNIPER_RANGE = 1400;
+const SNIPER_HALF_WIDTH = 4;
+const sniperState = { aimTimer: 0, target: null, isPart: false, flash: null };
+
+function sniperTargetValid() {
+    const t = sniperState.target;
+    if (!t || !t.active) return false;
+    if (sniperState.isPart) {
+        return !!(boss && boss.active && !boss.isInvulnerable && boss.parts.includes(t));
+    }
+    const ey = t.y + t.height * 0.5;
+    return ey > 0 && ey < GAME_HEIGHT;
+}
+
+function sniperTargetPos() {
+    const t = sniperState.target;
+    if (sniperState.isPart) {
+        return { x: boss.x + t.relX, y: boss.y + t.relY, r: Math.min(t.width, t.height) * 0.5 };
+    }
+    return { x: t.x + t.width * 0.5, y: t.y + t.height * 0.5, r: Math.min(t.width, t.height) * 0.5 };
+}
+
+function pickSniperTarget() {
+    sniperState.target = null;
+    sniperState.isPart = false;
+
+    if (boss && boss.active && !boss.isInvulnerable) {
+        let best = null;
+        for (const part of boss.parts) {
+            if (!part.active) continue;
+            if (!best || part.hp > best.hp) best = part;
+        }
+        if (best) {
+            sniperState.target = best;
+            sniperState.isPart = true;
+        }
+        return;
+    }
+
+    let best = null;
+    for (const enemy of enemies) {
+        if (!enemy.active) continue;
+        const ex = enemy.x + enemy.width * 0.5;
+        const ey = enemy.y + enemy.height * 0.5;
+        if (ey <= 0 || ey >= GAME_HEIGHT || ex < 0 || ex > GAME_WIDTH) continue;
+        if (!best || enemy.hp > best.hp) best = enemy;
+    }
+    sniperState.target = best;
+}
+
+function buildLaserPath(x, y, angle) {
+    let dx = Math.sin(angle);
+    let dy = -Math.cos(angle);
+    let px = x;
+    let py = y;
+    let remaining = LASER_MAX_LENGTH;
+    const pts = [{ x: px, y: py }];
+
+    for (let i = 0; i <= LASER_MAX_BOUNCES && remaining > 0; i++) {
+        const tx = dx > 1e-6 ? (GAME_WIDTH - px) / dx : (dx < -1e-6 ? (0 - px) / dx : Infinity);
+        const ty = dy > 1e-6 ? (GAME_HEIGHT - py) / dy : (dy < -1e-6 ? (0 - py) / dy : Infinity);
+        const t = Math.max(0, Math.min(tx, ty));
+
+        if (t >= remaining || !Number.isFinite(t)) {
+            pts.push({ x: px + dx * remaining, y: py + dy * remaining });
+            break;
+        }
+
+        px += dx * t;
+        py += dy * t;
+        remaining -= t;
+        pts.push({ x: px, y: py });
+
+        if (tx <= ty) dx = -dx;
+        if (ty <= tx) dy = -dy;
+    }
+    return pts;
+}
+
+function distToSegmentSq(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 > 0 ? ((px - x1) * dx + (py - y1) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const cx = x1 + dx * t;
+    const cy = y1 + dy * t;
+    return (px - cx) * (px - cx) + (py - cy) * (py - cy);
+}
+const electricLinks = [];
+
+// ELECTRO tuning
+// ELECTRO_RANGE: 自機から最初の標的までの最大距離(px)。これより遠い敵は狙わない。
+// ELECTRO_CHAIN_RANGE: 標的から次の敵へ連鎖できる最大距離(px)。
+// (画面サイズは 480x640。変更前は ELECTRO_RANGE=無制限 / ELECTRO_CHAIN_RANGE=150)
+const ELECTRO_RANGE = 320;
+const ELECTRO_CHAIN_RANGE = 120;
+    const keys = {};
+    let isFiringTouch = false;
+    let touchX = null;
+    let touchY = null;
+    let isTouching = false;
+
+    // ---------------------------------------------------------------
+    // 04. World data / object pools
+    // ---------------------------------------------------------------
+
+    // Background starfield parallax
+    const stars = [];
+    for (let i = 0; i < 100; i++) {
+        stars.push({
+            x: Math.random() * GAME_WIDTH,
+            y: Math.random() * GAME_HEIGHT,
+            size: Math.random() * 2 + 0.6,
+            speed: Math.random() * 3.0 + 0.8,
+            color: Math.random() > 0.4 ? '#00f0ff' : '#ffffff'
+        });
+    }
+
+    class Bullet {
+        constructor() {
+            this.active = false;
+            this.hitSet = new Set();
+        }
+
+        spawn(x, y, vx, vy, color = '#ff0055', radius = 3, isSplit = false, splitTimer = 0, type = 'normal', life = 999, width = 6, height = 6, critChanceMultiplier = 1, critDamageMultiplier = 1) {
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+            this.color = color;
+            this.radius = radius;
+            this.active = true;
+            this.isSplit = isSplit;
+            this.splitTimer = splitTimer;
+            this.type = type;
+            this.life = life;
+            this.maxLife = life;
+            this.width = width;
+            this.height = height;
+            this.critChanceMultiplier = critChanceMultiplier;
+            this.critDamageMultiplier = critDamageMultiplier;
+            this.dmgMult = 1;
+            this.canGuard = false;
+            this.splitWeapon = false;
+            this.homingFast = false;
+            this.homingMaxSpeed = 0;   // 0なら既定値(通常4.2 / 分裂後8.8)
+            this.homingTurnRate = 0;   // >0なら「旋回角制限」方式で追尾(周回防止)
+            this.lockTarget = null;    // ロックオン中の標的(敵 or ボスパーツ)
+            this.lockIsPart = false;
+            this.hitSet.clear();
+        }
+
+        isLockValid() {
+            const t = this.lockTarget;
+            if (!t) return false;
+            if (this.lockIsPart) {
+                return !!(boss && boss.active && boss.currentHp > 0 && t.active && boss.parts.includes(t));
+            }
+            return t.active;
+        }
+
+        // 自分に最も近い敵(またはボスパーツ)をロックオンする。
+        acquireLock() {
+            this.lockTarget = null;
+            this.lockIsPart = false;
+            let minDistSq = Infinity;
+            for (let i = 0; i < enemies.length; i++) {
+                const e = enemies[i];
+                if (!e.active) continue;
+                const dx = e.x + e.width * 0.5 - this.x;
+                const dy = e.y + e.height * 0.5 - this.y;
+                const d2 = dx * dx + dy * dy;
+                if (d2 < minDistSq) { minDistSq = d2; this.lockTarget = e; this.lockIsPart = false; }
+            }
+            if (boss && boss.active && boss.currentHp > 0) {
+                for (let i = 0; i < boss.parts.length; i++) {
+                    const p = boss.parts[i];
+                    if (!p.active) continue;
+                    const dx = boss.x + p.relX - this.x;
+                    const dy = boss.y + p.relY - this.y;
+                    const d2 = dx * dx + dy * dy;
+                    if (d2 < minDistSq) { minDistSq = d2; this.lockTarget = p; this.lockIsPart = true; }
+                }
+            }
+        }
+
+        update() {
+            if (this.type === 'homing') {
+                // 最初にロックオンした標的を追い続け、倒されたら最寄りの次の標的へ切り替える。
+                if (!this.isLockValid()) this.acquireLock();
+
+                if (this.lockTarget) {
+                    const t = this.lockTarget;
+                    const tx = this.lockIsPart ? boss.x + t.relX : t.x + t.width * 0.5;
+                    const ty = this.lockIsPart ? boss.y + t.relY : t.y + t.height * 0.5;
+                    const angle = Math.atan2(ty - this.y, tx - this.x);
+                    const maxHomingSpeed = this.homingMaxSpeed || (this.homingFast ? 8.8 : 4.2);
+
+                    if (this.homingTurnRate > 0) {
+                        // 旋回角制限方式: 向きを毎フレーム一定角まで標的へ回す。
+                        // ・時間が経つほど旋回力が上がる(同じ敵の周りを回り続けない)
+                        // ・標的が進行方向からズレているときは減速して小回りを利かせる
+                        let speed = Math.hypot(this.vx, this.vy) || maxHomingSpeed;
+                        const heading = Math.atan2(this.vy, this.vx);
+                        let diff = angle - heading;
+                        while (diff > Math.PI) diff -= Math.PI * 2;
+                        while (diff < -Math.PI) diff += Math.PI * 2;
+                        const age = this.maxLife - this.life;
+                        const rate = this.homingTurnRate + age * 0.004;
+                        const turn = Math.max(-rate, Math.min(rate, diff));
+                        const wantSpeed = Math.abs(diff) > 0.9 ? maxHomingSpeed * 0.6 : maxHomingSpeed;
+                        speed += (wantSpeed - speed) * 0.15;
+                        this.vx = Math.cos(heading + turn) * speed;
+                        this.vy = Math.sin(heading + turn) * speed;
+                    } else {
+                        const homingAccel = 0.45;
+                        this.vx += Math.cos(angle) * homingAccel;
+                        this.vy += Math.sin(angle) * homingAccel;
+                        const speed = Math.hypot(this.vx, this.vy);
+                        if (speed > maxHomingSpeed) {
+                            this.vx = (this.vx / speed) * maxHomingSpeed;
+                            this.vy = (this.vy / speed) * maxHomingSpeed;
+                        }
+                    }
+                }
+            }
+
+            this.x += this.vx;
+            this.y += this.vy;
+            this.life--;
+
+            if (this.life <= 0) {
+                this.active = false;
+                if (this.type === 'shotgun') {
+                    createExplosion(this.x, this.y, this.color, 3);
+                }
+                return;
+            }
+
+            if (this.isSplit) {
+                this.splitTimer--;
+                if (this.splitTimer <= 0) {
+                    this.active = false;
+
+                    if (this.type === 'homing' && this.splitWeapon) {
+                        // HOMING武器：途中で3発に分裂。分裂弾も敵を追尾する。
+                        const baseAngle = Math.atan2(this.vy, this.vx);
+                        const splitAngle = 0.42;
+                        const speed = 8.8;
+                        for (const angle of [baseAngle - splitAngle, baseAngle, baseAngle + splitAngle]) {
+                            spawnFromPool(playerBulletPool, b => {
+                                b.spawn(
+                                    this.x, this.y,
+                                    Math.cos(angle) * speed,
+                                    Math.sin(angle) * speed,
+                                    '#ffb347', 5, false, 0,
+                                    'homing', 100, 10, 10,
+                                    1, 1
+                                );
+                                b.splitWeapon = false;
+                                b.homingFast = true;
+                                b.lockTarget = this.lockTarget;
+                                b.lockIsPart = this.lockIsPart;
+                            });
+                        }
+                        createExplosion(this.x, this.y, '#ffb347', 8);
+                    } else {
+                        const numSplits = 6;
+                        for (let i = 0; i < numSplits; i++) {
+                            const angle = (Math.PI * 2 / numSplits) * i;
+                            const speed = 4;
+                            spawnFromPool(enemyBulletPool, b => b.spawn(
+                                this.x, this.y,
+                                Math.cos(angle) * speed,
+                                Math.sin(angle) * speed,
+                                '#ff00aa', 3, false, 0
+                            ));
+                        }
+                        createExplosion(this.x, this.y, '#ff00aa', 8);
+                    }
+                }
+            }
+
+            if (this.x < -60 || this.x > GAME_WIDTH + 60 || this.y < -60 || this.y > GAME_HEIGHT + 60) {
+                this.active = false;
+            }
+        }
+
+        draw() {
+            if (this.type === 'blade') {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = '#ff3366';
+                ctx.shadowBlur = 10;
+
+                const outerR = this.width / 2;
+                const innerR = outerR * 0.65;
+
+                ctx.beginPath();
+                ctx.arc(0, 0, outerR, Math.PI * 0.8, Math.PI * 0.2, false);
+                ctx.arc(0, outerR * 0.3, innerR, Math.PI * 0.15, Math.PI * 0.85, true);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.restore();
+            } else if (this.type === 'drill') {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 8;
+
+                // 縦長の大型ドリル弾
+                ctx.beginPath();
+                ctx.moveTo(0, -this.height / 2);
+                ctx.lineTo(this.width / 2, this.height * 0.18);
+                ctx.lineTo(this.width * 0.18, this.height * 0.12);
+                ctx.lineTo(this.width * 0.30, this.height / 2);
+                ctx.lineTo(0, this.height * 0.25);
+                ctx.lineTo(-this.width * 0.30, this.height / 2);
+                ctx.lineTo(-this.width * 0.18, this.height * 0.12);
+                ctx.lineTo(-this.width / 2, this.height * 0.18);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+                ctx.restore();
+            } else if (this.type === 'homing') {
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 5;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            } else {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                if (this.isSplit) {
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            }
+        }
+    }
+
+    class Particle {
+        constructor() {
+            this.active = false;
+        }
+        spawn(x, y, color) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 5 + 1;
+            this.x = x;
+            this.y = y;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.life = 1.0;
+            this.decay = Math.random() * 0.04 + 0.025;
+            this.color = color;
+            this.size = Math.random() * 3 + 1.2;
+            this.active = true;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.life -= this.decay;
+            if (this.life <= 0) this.active = false;
+        }
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.fillRect(this.x, this.y, this.size, this.size);
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    class DamageText {
+        constructor() {
+            this.active = false;
+        }
+        spawn(x, y, text, color = '#ffff00', isCritical = false) {
+            this.x = x + (Math.random() - 0.5) * 14;
+            this.y = y;
+            this.text = String(text);
+            this.color = color;
+            this.life = 1.0;
+            this.decay = 0.04;
+            this.vy = -1.6;
+            this.fontSize = isCritical ? 14 : 10;
+            this.active = true;
+        }
+        update() {
+            this.y += this.vy;
+            this.life -= this.decay;
+            if (this.life <= 0) this.active = false;
+        }
+        draw() {
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.font = `${this.fontSize}px 'Press Start 2P', monospace`;
+            ctx.fillStyle = this.color;
+            ctx.textAlign = 'center';
+            ctx.fillText(this.text, this.x, this.y);
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    function createPool(ClassType, size) {
+        const pool = [];
+        for (let i = 0; i < size; i++) pool.push(new ClassType());
+        return pool;
+    }
+
+    const playerBulletPool = createPool(Bullet, 180);
+    const enemyBulletPool = createPool(Bullet, 300);
+    const particlePool = createPool(Particle, 350);
+    const damageTextPool = createPool(DamageText, 120);
+
+    // Pool cursor: 毎回0番から空きを探さず、前回の続きから探索する。
+    // オブジェクト数が増えた終盤ほど効くが、プール自体の挙動は変えない。
+    const poolCursors = new Map([
+        [playerBulletPool, 0],
+        [enemyBulletPool, 0],
+        [particlePool, 0],
+        [damageTextPool, 0]
+    ]);
+
+    function spawnFromPool(pool, spawnFn) {
+        const len = pool.length;
+        let start = poolCursors.get(pool) || 0;
+
+        for (let n = 0; n < len; n++) {
+            const i = (start + n) % len;
+            const obj = pool[i];
+            if (!obj.active) {
+                spawnFn(obj);
+                poolCursors.set(pool, (i + 1) % len);
+                return obj;
+            }
+        }
+        return null;
+    }
+
+    function createExplosion(x, y, color = '#ff0055', count = 16) {
+        for (let i = 0; i < count; i++) {
+            spawnFromPool(particlePool, p => p.spawn(x, y, color));
+        }
+    }
+
+    function createDamageText(x, y, text, color = '#ffff00', isCritical = false) {
+        spawnFromPool(damageTextPool, dt => dt.spawn(x, y, text, color, isCritical));
+    }
+
+    // ---------------------------------------------------------------
+    // Player
+    // ---------------------------------------------------------------
+    class Player {
+        constructor() {
+            this.width = 32;
+            this.height = 32;
+            this.shipType = 0;
+            this.missileToggle = false;
+            this.burstShotsRemaining = 0;
+            this.burstDelay = 0;
+            this.reset();
+        }
+
+        reset() {
+            this.x = GAME_WIDTH / 2 - this.width / 2;
+            this.y = GAME_HEIGHT - 90;
+            this.speed = 5.5;
+            this.maxLives = 3;
+            this.lives = 3;
+            this.shootCooldown = 0;
+            this.invulnerableTimer = 0;
+            this.missileToggle = false;
+            this.shield = false;
+        }
+
+        update() {
+            const hasTron = hasWeapon('tron');
+            const moveSpeed = this.speed * (hasTron ? TRON_SPEED_MULT : 1);
+            if (keys['ArrowLeft'] || keys['a'] || keys['A']) this.x -= moveSpeed;
+            if (keys['ArrowRight'] || keys['d'] || keys['D']) this.x += moveSpeed;
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) this.y -= moveSpeed;
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) this.y += moveSpeed;
+
+            if (isTouching && touchX !== null && touchY !== null) {
+                const targetX = touchX - this.width / 2;
+                const targetY = touchY - this.height / 2;
+                const follow = hasTron ? TRON_TOUCH_FOLLOW : 0.32;
+                this.x += (targetX - this.x) * follow;
+                this.y += (targetY - this.y) * follow;
+            }
+
+            this.x = Math.max(0, Math.min(GAME_WIDTH - this.width, this.x));
+            this.y = Math.max(0, Math.min(GAME_HEIGHT - this.height, this.y));
+
+            if (this.shootCooldown > 0) this.shootCooldown--;
+
+            const isFirePressed = keys['Space'] || keys[' '] || isFiringTouch;
+
+            if (gameState === STATE_PLAYING) {
+                // TYPE-2は通常連射ではなく、短い3連バーストへ。
+                if (this.shipType === 1 && this.burstShotsRemaining > 0) {
+                    if (this.burstDelay > 0) {
+                        this.burstDelay--;
+                    } else {
+                        this.shoot();
+                        this.burstShotsRemaining--;
+
+                        if (this.burstShotsRemaining > 0) {
+                            this.burstDelay = 4;
+                        } else {
+                            const burstCooldownMap = [26, 22, 18, 15];
+                            this.shootCooldown = burstCooldownMap[fireRateLevel - 1] || 15;
+                        }
+                    }
+                } else if (isFirePressed && this.shootCooldown === 0) {
+                    if (this.shipType === 1) {
+                        // 1回の入力で3連発。撃ち切った後は再装填時間。
+                        this.shoot();
+                        this.burstShotsRemaining = 2;
+                        this.burstDelay = 4;
+                        this.shootCooldown = 9999;
+                    } else {
+                        this.shoot();
+
+                        if (this.shipType === 0) {
+                            const baseCooldownMap = [10, 7, 5, 3];
+                            const base = baseCooldownMap[fireRateLevel - 1] || 3;
+                            this.shootCooldown = Math.max(2, Math.round(base * 0.8));
+                        } else if (this.shipType === 2) {
+                            const cooldownMap = [18, 14, 11, 8];
+                            this.shootCooldown = cooldownMap[fireRateLevel - 1] || 8;
+                        } else if (this.shipType === 3) {
+                            const cooldownMap = [14, 10, 8, 5];
+                            this.shootCooldown = cooldownMap[fireRateLevel - 1] || 5;
+                        }
+                    }
+                }
+            }
+
+            if (this.invulnerableTimer > 0) this.invulnerableTimer--;
+        }
+
+        shoot() {
+            sfx.playLaser();
+
+            const fire = (x, y, vx, vy, color = '#00f0ff', radius = 3, type = 'normal', life = 999, w = 6, h = 6, critChanceMultiplier = 1, critDamageMultiplier = 1, canGuard = false) => {
+                return spawnFromPool(playerBulletPool, b => {
+                    b.spawn(
+                        x, y, vx, vy, color, radius, false, 0, type, life, w, h,
+                        critChanceMultiplier, critDamageMultiplier
+                    );
+                    b.canGuard = canGuard;
+                });
+            };
+
+            const cx = this.x + this.width / 2;
+
+            if (this.shipType === 0) {
+                if (shotPowerLevel === 1) {
+                    fire(this.x + 8, this.y, 0, -12);
+                    fire(this.x + this.width - 8, this.y, 0, -12);
+                } else if (shotPowerLevel === 2) {
+                    fire(cx, this.y, 0, -12);
+                    fire(this.x + 4, this.y, -2, -11.5);
+                    fire(this.x + this.width - 4, this.y, 2, -11.5);
+                } else if (shotPowerLevel === 3) {
+                    fire(this.x + 6, this.y, -3, -11);
+                    fire(this.x + 12, this.y, -1, -12);
+                    fire(this.x + this.width - 12, this.y, 1, -12);
+                    fire(this.x + this.width - 6, this.y, 3, -11);
+                } else {
+                    // Lv4中央の赤弾：クリ率1.5倍(CRIT_RATE_MULT_SPECIAL)＋強化クリダメ(CRIT_MULT_SPECIAL)
+                    fire(cx, this.y, 0, -12, '#ff00f0', 3, 'normal', 999, 6, 6, CRIT_RATE_MULT_SPECIAL, 2);
+                    fire(this.x + 8, this.y, -2.5, -11.5);
+                    fire(this.x + this.width - 8, this.y, 2.5, -11.5);
+                    fire(this.x, this.y + 4, -5, -10.5);
+                    fire(this.x + this.width, this.y + 4, 5, -10.5);
+                }
+            } 
+            else if (this.shipType === 1) {
+                // TYPE-2 弱体化：3連バースト＋弾消しは中央ブレードだけ。
+                const bladeWidths = [85, 105, 125, 150];
+                const bw = bladeWidths[shotPowerLevel - 1];
+
+                // 中央ブレードだけ敵弾をガード。
+                fire(cx, this.y - 15, 0, -5.4, '#ff2a6d', 0, 'blade', 35, bw, bw * 0.5, 1, 1, true);
+
+                if (shotPowerLevel >= 2) {
+                    // サイドブレードは攻撃専用。
+                    fire(cx - 20, this.y, -1.5, -5.1, '#ff758c', 0, 'blade', 30, bw * 0.6, bw * 0.3, 1, 1, false);
+                    fire(cx + 20, this.y, 1.5, -5.1, '#ff758c', 0, 'blade', 30, bw * 0.6, bw * 0.3, 1, 1, false);
+                }
+                if (shotPowerLevel >= 4) {
+                    fire(cx - 35, this.y + 5, -3.0, -4.8, '#ff758c', 0, 'blade', 25, bw * 0.5, bw * 0.25, 1, 1, false);
+                    fire(cx + 35, this.y + 5, 3.0, -4.8, '#ff758c', 0, 'blade', 25, bw * 0.5, bw * 0.25, 1, 1, false);
+                }
+            } 
+            else if (this.shipType === 2) {
+                // TYPE-3 強化：散弾数・集弾率・射程アップ＋中央散弾のクリティカル強化
+                const pelletCountMap = [8, 10, 12, 14];
+                const numPellets = pelletCountMap[shotPowerLevel - 1] || 14;
+
+                // 拡散角をさらに絞って、重散弾を前方へ集中。
+                const spreadAngleMap = [0.72, 0.70, 0.68, 0.66];
+                const spreadAngle = spreadAngleMap[shotPowerLevel - 1] || 0.66;
+
+                // 散弾の射程を大幅延長。Lvが上がるほど遠くまで残る。
+                const rangeLifeMap = [28, 30, 32, 34];
+                const lifeTime = rangeLifeMap[shotPowerLevel - 1] || 34;
+
+                // 中央の数発だけ、通常よりクリ率1.5倍・強化クリダメ。
+                // 通常クリ倍率は「ダメージ1.5倍」(CRIT_MULT_NORMAL)、
+                // 強化対象はクリティカル時「ダメージ2倍」(CRIT_MULT_SPECIAL)になる。
+                const centerCount = Math.min(4, Math.max(2, Math.ceil(numPellets * 0.25)));
+                const centerStart = Math.floor((numPellets - centerCount) / 2);
+
+                for (let i = 0; i < numPellets; i++) {
+                    const angle = -Math.PI / 2 + (i / (numPellets - 1) - 0.5) * spreadAngle;
+                    const speed = 9.5 + Math.random() * 1.5;
+                    const vx = Math.cos(angle) * speed;
+                    const vy = Math.sin(angle) * speed;
+                    const isCenterPellet = i >= centerStart && i < centerStart + centerCount;
+
+                    fire(
+                        cx, this.y, vx, vy, '#f59e0b', 4, 'shotgun', lifeTime,
+                        6, 6,
+                        isCenterPellet ? CRIT_RATE_MULT_SPECIAL : 1,
+                        isCenterPellet ? 2 : 1
+                    );
+                }
+            } 
+            else if (this.shipType === 3) {
+                // ミサイルを1発ずつ（左右交互に発射）
+                this.missileToggle = !this.missileToggle;
+                const side = this.missileToggle ? 1 : -1;
+                const powerBonus = (shotPowerLevel - 1) * 0.3;
+                const missile = fire(cx + side * 12, this.y, side * (1.6 + powerBonus), -7, '#38bdf8', 4, 'homing', 130);
+                if (missile) {
+                    missile.homingMaxSpeed = SHIP4_MISSILE_MAX_SPEED;
+                    missile.homingTurnRate = SHIP4_MISSILE_TURN_RATE;
+                }
+            }
+        }
+
+        hit() {
+            if (this.invulnerableTimer > 0) return;
+
+            if (this.shield) {
+                // シールドが1回分の被弾を無効化
+                this.shield = false;
+                shieldTimerMs = 0;
+                this.invulnerableTimer = 40;
+                sfx.playExplosion(false);
+                createExplosion(this.x + this.width / 2, this.y + this.height / 2, '#38bdf8', 18);
+                return;
+            }
+
+            this.lives--;
+            sfx.playExplosion(true);
+            createExplosion(this.x + this.width / 2, this.y + this.height / 2, '#ff0055', 25);
+            this.invulnerableTimer = 70;
+
+            if (this.lives <= 0) {
+                triggerGameOver();
+            }
+        }
+
+        draw() {
+            if (this.invulnerableTimer > 0 && Math.floor(this.invulnerableTimer / 4) % 2 === 0) return;
+
+            ctx.save();
+            ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+
+            if (this.shipType === 0) {
+                ctx.fillStyle = shotPowerLevel === 4 ? '#ff00f0' : '#00f0ff';
+                ctx.beginPath();
+                ctx.moveTo(0, -16);
+                ctx.lineTo(14, 12);
+                ctx.lineTo(6, 8);
+                ctx.lineTo(0, 14);
+                ctx.lineTo(-6, 8);
+                ctx.lineTo(-14, 12);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else if (this.shipType === 1) {
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.moveTo(0, -18);
+                ctx.lineTo(16, 6);
+                ctx.lineTo(10, 16);
+                ctx.lineTo(0, 8);
+                ctx.lineTo(-10, 16);
+                ctx.lineTo(-16, 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else if (this.shipType === 2) {
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.moveTo(-12, -10);
+                ctx.lineTo(12, -10);
+                ctx.lineTo(15, 12);
+                ctx.lineTo(-15, 12);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else if (this.shipType === 3) {
+                ctx.fillStyle = '#a855f7';
+                ctx.beginPath();
+                ctx.arc(0, -2, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillRect(-16, 4, 32, 6);
+            }
+
+            ctx.fillStyle = (renderFrame >> 2) & 1 ? '#ff9900' : '#ff0000';
+            ctx.beginPath();
+            ctx.moveTo(-4, 12);
+            ctx.lineTo(0, 18 + ((renderFrame >> 1) % 9));
+            ctx.lineTo(4, 12);
+            ctx.closePath();
+            ctx.fill();
+
+            if (this.shield) {
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.55 + 0.25 * Math.sin(renderFrame * 0.2);
+                ctx.beginPath();
+                ctx.arc(0, 0, 25, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.globalAlpha = 0.12;
+                ctx.fillStyle = '#38bdf8';
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Enemy
+    // ---------------------------------------------------------------
+    class Enemy {
+        constructor(type = 0) {
+            this.init(type);
+        }
+
+        init(type = 0) {
+            this.type = type;
+            this.active = true;
+            this.formationDirection = 0;
+
+            if (type === 0) {
+                this.width = 28;
+                this.height = 28;
+                this.hp = 2 + bossLevel * 1 * ENEMY_LEVEL_SCALE;
+                this.speedX = (Math.random() - 0.5) * 2;
+                this.speedY = Math.random() * 1.5 + 2;
+                this.color = '#ff0055';
+                this.shootTimer = Math.floor(Math.random() * 50) + 25;
+            } else if (type === 1) {
+                this.width = 36;
+                this.height = 36;
+                this.hp = 5 + bossLevel * 3 * ENEMY_LEVEL_SCALE;
+                this.speedX = (Math.random() - 0.5) * 1.5;
+                this.speedY = 1.3;
+                this.color = '#ff9900';
+                this.shootTimer = Math.floor(Math.random() * 45) + 20;
+            } else if (type === 2) {
+                this.width = 34;
+                this.height = 34;
+                this.hp = 3 + bossLevel * 2 * ENEMY_LEVEL_SCALE;
+                this.speedX = (Math.random() - 0.5) * 1.0;
+                this.speedY = Math.random() * 2 + 2.5;
+                this.color = '#a3a3a3';
+                this.rotAngle = 0;
+                this.rotSpeed = (Math.random() - 0.5) * 0.08;
+                this.shootTimer = 999999;
+            } else if (type === 6) {
+                // ミサイル艦：ゆっくり降下しながら、自機を追うミサイルを撃つ。
+                this.width = 34;
+                this.height = 30;
+                this.hp = 4 + bossLevel * 2 * ENEMY_LEVEL_SCALE;
+                this.speedX = (Math.random() - 0.5) * 0.8;
+                this.speedY = 0.9 + Math.random() * 0.4;
+                this.color = '#dc2626';
+                this.shootTimer = 70 + Math.floor(Math.random() * 60);
+            } else if (type === 7) {
+                // ミサイル：旋回に制限がある追尾弾。撃ち落とせる。
+                this.width = 12;
+                this.height = 12;
+                this.hp = 1 + Math.floor(bossLevel * 0.4 * ENEMY_LEVEL_SCALE);
+                this.speedX = 0;
+                this.speedY = 0;
+                this.color = '#f87171';
+                this.heading = Math.PI / 2;
+                this.rotAngle = this.heading;
+                this.age = 0;
+                this.shootTimer = 999999;
+            } else if (type === 4) {
+                // 分裂隕石：大型で硬い。倒すと小さな破片(type 5)が2つに分かれて飛ぶ。
+                this.width = 46;
+                this.height = 46;
+                this.hp = 6 + bossLevel * 3 * ENEMY_LEVEL_SCALE;
+                this.speedX = (Math.random() - 0.5) * 1.0;
+                this.speedY = Math.random() * 0.8 + 1.5;
+                this.color = '#b45309';
+                this.rotAngle = 0;
+                this.rotSpeed = (Math.random() - 0.5) * 0.04;
+                this.shootTimer = 999999;
+                this.splitDone = false;
+            } else if (type === 5) {
+                // 分裂隕石の破片：小さく速い。分裂はしない。
+                this.width = 22;
+                this.height = 22;
+                this.hp = 1 + bossLevel * 1 * ENEMY_LEVEL_SCALE;
+                this.speedX = (Math.random() < 0.5 ? -1 : 1) * (1.8 + Math.random());
+                this.speedY = 2.6 + Math.random() * 1.2;
+                this.color = '#d97706';
+                this.rotAngle = 0;
+                this.rotSpeed = (Math.random() - 0.5) * 0.16;
+                this.shootTimer = 999999;
+            } else {
+                // 高速編隊機：左右から侵入。出現位置と移動パターンは毎回ランダム。
+                this.width = 18;
+                this.height = 18;
+                this.hp = 1 + Math.floor(bossLevel * 0.5 * ENEMY_LEVEL_SCALE);
+                this.speedX = 0;
+                this.speedY = 0;
+                this.color = '#22d3ee';
+                this.rotAngle = 0;
+                this.rotSpeed = 0;
+                this.shootTimer = 999999;
+                this.formationMoveType = 2;
+                this.formationBaseY = 0;
+                this.formationPhase = 0;
+                this.rotRemaining = 0;
+                this.homingStrength = 0.11;
+                this.formSpeed = 7.8;
+            }
+
+            this.x = Math.random() * (GAME_WIDTH - this.width);
+            this.y = -this.height;
+        }
+
+        update() {
+            if (this.type === 7) {
+                this.age++;
+                const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
+                const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+                let diff = Math.atan2(dy, dx) - this.heading;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                this.heading += Math.max(-MISSILE_TURN_RATE, Math.min(MISSILE_TURN_RATE, diff));
+                this.x += Math.cos(this.heading) * MISSILE_SPEED;
+                this.y += Math.sin(this.heading) * MISSILE_SPEED;
+                this.rotAngle = this.heading;
+                if (this.age > MISSILE_LIFE_FRAMES) {
+                    this.active = false;
+                    createExplosion(this.x + this.width / 2, this.y + this.height / 2, this.color, 8);
+                } else if (this.x < -50 || this.x > GAME_WIDTH + 50 || this.y < -50 || this.y > GAME_HEIGHT + 50) {
+                    this.active = false;
+                }
+                return;
+            }
+
+            if (this.type === 3) {
+                if (this.formationMoveType === 0) {
+                    // ① 公転型：仮想中心の周りを小さく旋回しながら前進。
+                    // 自機そのものが回るのではなく、敵の軌道が円弧になる。
+                    this.orbitAngle += 0.11 * this.formationDirection;
+                    this.x += this.speedX;
+                    this.y = this.formationBaseY
+                        + Math.sin(this.orbitAngle + this.formationPhase) * 18;
+
+                    // 横方向にも少し円運動を加えて、きれいな公転軌道にする。
+                    this.x += Math.cos(this.orbitAngle + this.formationPhase) * 7;
+
+                    this.rotAngle = Math.atan2(
+                        Math.cos(this.orbitAngle + this.formationPhase) * 2,
+                        this.speedX
+                    );
+
+                } else if (this.formationMoveType === 1) {
+                    // ② 自機狙い：徐々に自機へ向かう。
+                    const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
+                    const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+                    const distance = Math.max(1, Math.hypot(dx, dy));
+                    const desiredVx = (dx / distance) * this.formSpeed;
+                    const desiredVy = (dy / distance) * this.formSpeed;
+
+                    this.speedX += (desiredVx - this.speedX) * this.homingStrength;
+                    this.speedY += (desiredVy - this.speedY) * this.homingStrength;
+
+                    const currentSpeed = Math.hypot(this.speedX, this.speedY);
+                    if (currentSpeed > this.formSpeed) {
+                        this.speedX = (this.speedX / currentSpeed) * this.formSpeed;
+                        this.speedY = (this.speedY / currentSpeed) * this.formSpeed;
+                    }
+
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                    this.rotAngle = Math.atan2(this.speedY, this.speedX);
+
+                } else {
+                    // ③ 直進：横方向へまっすぐ進む。
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                    this.rotAngle = this.formationDirection > 0 ? 0 : Math.PI;
+                }
+
+                if (this.x < -70 || this.x > GAME_WIDTH + 70 ||
+                    this.y < -70 || this.y > GAME_HEIGHT + 70) {
+                    this.active = false;
+                }
+                return;
+            }
+
+            this.y += this.speedY;
+            this.x += this.speedX;
+
+            if (this.type === 2 || this.type === 4 || this.type === 5) this.rotAngle += this.rotSpeed;
+            if (this.x <= 0 || this.x >= GAME_WIDTH - this.width) this.speedX *= -1;
+            if (this.y > GAME_HEIGHT + 35) this.active = false;
+
+            if (this.type === 6) {
+                this.shootTimer--;
+                if (this.shootTimer <= 0) {
+                    this.shootTimer = 170 + Math.random() * 60;
+                    if (this.y > 0 && this.y < GAME_HEIGHT - 220) {
+                        const msl = new Enemy(7);
+                        msl.x = this.x + this.width / 2 - msl.width / 2;
+                        msl.y = this.y + this.height;
+                        enemies.push(msl);
+                    }
+                }
+            }
+
+            if (this.type === 0 || this.type === 1) {
+                this.shootTimer--;
+                if (this.shootTimer <= 0) {
+                    this.shootTimer = 80 + Math.random() * 50;
+                    if (this.y < GAME_HEIGHT - 120) {
+                        const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                        spawnFromPool(enemyBulletPool, b => b.spawn(
+                            this.x + this.width / 2,
+                            this.y + this.height,
+                            Math.cos(angle) * 4.5,
+                            Math.sin(angle) * 4.5,
+                            '#ff0055'
+                        ));
+                    }
+                }
+            }
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+
+            if (this.type === 0) {
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, 14);
+                ctx.lineTo(14, 0);
+                ctx.lineTo(0, -14);
+                ctx.lineTo(-14, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else if (this.type === 1) {
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(-12, -14);
+                ctx.lineTo(12, -14);
+                ctx.lineTo(18, 0);
+                ctx.lineTo(12, 14);
+                ctx.lineTo(-12, 14);
+                ctx.lineTo(-18, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else if (this.type === 2) {
+                ctx.rotate(this.rotAngle);
+                ctx.fillStyle = '#64748b';
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-12, -16);
+                ctx.lineTo(8, -14);
+                ctx.lineTo(16, -4);
+                ctx.lineTo(14, 12);
+                ctx.lineTo(0, 16);
+                ctx.lineTo(-14, 10);
+                ctx.lineTo(-16, -6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else if (this.type === 6) {
+                // ミサイル艦：赤い船体と、左右のミサイルポッド
+                ctx.fillStyle = '#7f1d1d';
+                ctx.strokeStyle = '#f87171';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, 15);
+                ctx.lineTo(17, -4);
+                ctx.lineTo(10, -15);
+                ctx.lineTo(-10, -15);
+                ctx.lineTo(-17, -4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#fca5a5';
+                ctx.fillRect(-14, -2, 5, 10);
+                ctx.fillRect(9, -2, 5, 10);
+            } else if (this.type === 7) {
+                // ミサイル：進行方向を向いた小型弾体と炎
+                ctx.rotate(this.rotAngle);
+                ctx.fillStyle = '#fb923c';
+                ctx.beginPath();
+                ctx.moveTo(-6, 0);
+                ctx.lineTo(-13 - Math.random() * 3, -3);
+                ctx.lineTo(-13 - Math.random() * 3, 3);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = '#fee2e2';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(8, 0);
+                ctx.lineTo(-6, -4);
+                ctx.lineTo(-6, 4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else if (this.type === 4 || this.type === 5) {
+                // 分裂隕石(大)と破片(小)：隕石の形を拡大縮小。大きいほうには割れ目を描く。
+                const sc = this.type === 4 ? 1.4 : 0.68;
+                ctx.rotate(this.rotAngle);
+                ctx.scale(sc, sc);
+                ctx.fillStyle = this.type === 4 ? '#78350f' : '#92400e';
+                ctx.strokeStyle = '#fbbf24';
+                ctx.lineWidth = 2 / sc;
+                ctx.beginPath();
+                ctx.moveTo(-12, -16);
+                ctx.lineTo(8, -14);
+                ctx.lineTo(16, -4);
+                ctx.lineTo(14, 12);
+                ctx.lineTo(0, 16);
+                ctx.lineTo(-14, 10);
+                ctx.lineTo(-16, -6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                if (this.type === 4) {
+                    ctx.beginPath();
+                    ctx.moveTo(-3, -15);
+                    ctx.lineTo(2, -4);
+                    ctx.lineTo(-4, 4);
+                    ctx.lineTo(1, 15);
+                    ctx.stroke();
+                }
+            } else {
+                // 高速編隊機：小さな三角形＋発光コア
+                ctx.rotate(this.rotAngle);
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = '#ecfeff';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(10, 0);
+                ctx.lineTo(-7, -7);
+                ctx.lineTo(-3, 0);
+                ctx.lineTo(-7, 7);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(0, 0, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Boss
+    // ---------------------------------------------------------------
+    // ボス突進攻撃の調整用(フレーム単位。60fps想定で 30フレーム ≒ 0.5秒)
+    const BOSS_CHARGE_TELEGRAPH_FRAMES = 45;  // 点滅時間(約0.75秒)
+    const BOSS_CHARGE_FRONT_WIDTH = 70;       // 「目の前」と見なす左右の幅(px)
+    const BOSS_CHARGE_CHANCE = 0.5;           // 条件を満たしたときに実際に突進する確率
+    const BOSS_CHARGE_MAX_SPEED = 14;         // 突進の最高速度
+    const BOSS_CHARGE_END_Y = GAME_HEIGHT * 0.5; // 突進の到達位置(画面の半分)
+    const BOSS_CHARGE_REACH_MARGIN = 90;      // 到達位置からさらに下、この距離までを「目の前」とみなす
+    const BOSS_RETURN_SPEED = 2.0;            // 元の位置へ戻る速度(まっすぐ上へ)
+    const BOSS_CHARGE_COOLDOWN_BASE = 420;    // 突進後の待機フレーム(レベルで短縮)
+    const BOSS_CHARGE_COOLDOWN_MIN = 240;
+
+    class Boss {
+        constructor(level = 0) {
+            this.x = GAME_WIDTH / 2;
+            this.y = -120;
+            this.targetY = 90;
+            this.active = true;
+            this.timer = 0;
+            this.level = level;
+            this.isInvulnerable = true;
+            this.meteorSpawnCooldown = 150;
+
+            // 突進攻撃: idle → telegraph(点滅) → charge(突進) → return(帰還)
+            this.chargeState = 'idle';
+            this.chargeTimer = 0;
+            this.chargeCooldown = 240;
+            this.chargeVy = 0;
+            this.swayPhase = 0; // 左右移動の位相(通常時のみ進む)
+
+            this.parts = [
+                {
+                    id: 'split',
+                    name: '中央コア',
+                    relX: 0,
+                    relY: -10,
+                    width: 48,
+                    height: 48,
+                    maxHp: 90 + level * 50,
+                    hp: 90 + level * 50,
+                    active: true,
+                    color: '#ff00aa',
+                    shootCooldown: 38
+                },
+                {
+                    id: 'aim',
+                    name: '左翼砲台',
+                    relX: -46,
+                    relY: 15,
+                    width: 36,
+                    height: 36,
+                    maxHp: 60 + level * 35,
+                    hp: 60 + level * 35,
+                    active: true,
+                    color: '#00f0ff',
+                    shootCooldown: 28
+                },
+                {
+                    id: 'random',
+                    name: '右翼砲台',
+                    relX: 46,
+                    relY: 15,
+                    width: 36,
+                    height: 36,
+                    maxHp: 60 + level * 35,
+                    hp: 60 + level * 35,
+                    active: true,
+                    color: '#ffcc00',
+                    shootCooldown: 18
+                }
+            ];
+
+            this.maxHp = this.parts.reduce((sum, p) => sum + p.maxHp, 0);
+        }
+
+        // 自機がボスの真下付近にいるか
+        // widthScale: 左右の許容幅の倍率
+        isPlayerInFront(widthScale = 1) {
+            const pcx = player.x + player.width * 0.5;
+            const pcy = player.y + player.height * 0.5;
+            const inLane = Math.abs(pcx - this.x) < BOSS_CHARGE_FRONT_WIDTH * widthScale;
+            // ボスより下で、かつ突進が届く範囲(到達位置の少し先まで)にいること
+            const inReach = pcy > this.y + 60 && pcy < BOSS_CHARGE_END_Y + BOSS_CHARGE_REACH_MARGIN;
+            return inLane && inReach;
+        }
+
+        updateMovementAndCharge() {
+            if (this.chargeState === 'idle') {
+                this.swayPhase += 0.03;
+                this.x = GAME_WIDTH / 2 + Math.sin(this.swayPhase) * (GAME_WIDTH / 2 - 70);
+                this.y = this.targetY;
+                this.chargeCooldown--;
+                if (this.chargeCooldown <= 0) {
+                    if (this.isPlayerInFront() && Math.random() < BOSS_CHARGE_CHANCE) {
+                        this.chargeState = 'telegraph';
+                        this.chargeTimer = BOSS_CHARGE_TELEGRAPH_FRAMES;
+                        sfx.playWarning();
+                    } else {
+                        // 条件外/抽選外なら少し待って再判定
+                        this.chargeCooldown = 60 + Math.floor(Math.random() * 60);
+                    }
+                }
+            } else if (this.chargeState === 'telegraph') {
+                // その場で停止して点滅(約0.5秒)
+                this.chargeTimer--;
+                if (this.chargeTimer <= 0) {
+                    // 溜め中に自機が逃げても、予告した位置へそのまま突っ込む
+                    this.chargeState = 'charge';
+                    this.chargeVy = 3;
+                }
+            } else if (this.chargeState === 'charge') {
+                this.chargeVy = Math.min(BOSS_CHARGE_MAX_SPEED, this.chargeVy + 0.9);
+                this.y += this.chargeVy;
+                if (this.y >= BOSS_CHARGE_END_Y) {
+                    this.y = BOSS_CHARGE_END_Y;
+                    this.chargeState = 'return';
+                    createExplosion(this.x, this.y + 30, '#ff7a00', 14);
+                }
+            } else if (this.chargeState === 'return') {
+                // xは固定のまま、まっすぐ上へ戻る
+                this.y -= BOSS_RETURN_SPEED;
+                if (this.y <= this.targetY) {
+                    this.y = this.targetY;
+                    this.chargeState = 'idle';
+                    this.chargeCooldown = Math.max(BOSS_CHARGE_COOLDOWN_MIN,
+                        BOSS_CHARGE_COOLDOWN_BASE - this.level * 15) + Math.floor(Math.random() * 120);
+                }
+            }
+        }
+
+        get currentHp() {
+            return this.parts.reduce((sum, p) => sum + (p.active ? Math.max(0, p.hp) : 0), 0);
+        }
+
+        update() {
+            this.timer++;
+
+            // 登場中は完全無敵。所定位置に着いた瞬間から攻撃可能になる。
+            if (this.y < this.targetY) {
+                this.y += 1.5;
+                this.isInvulnerable = true;
+                return;
+            }
+
+            this.isInvulnerable = false;
+            this.updateMovementAndCharge();
+
+            // 突進の予告・突進・帰還の間は、射撃も隕石の呼び出しも行わない。
+            if (this.chargeState !== 'idle') return;
+
+            // ボス戦中は一定間隔で隕石(type 2)を呼び出す。
+            this.meteorSpawnCooldown--;
+            if (this.meteorSpawnCooldown <= 0) {
+                this.meteorSpawnCooldown = Math.max(110, 150 - this.level * 8);
+
+                const count = 2 + Math.min(1, Math.floor(this.level / 2));
+                for (let i = 0; i < count; i++) {
+                    const meteor = new Enemy(2);
+                    const spread = (i - (count - 1) / 2) * 38;
+                    meteor.x = Math.max(0, Math.min(GAME_WIDTH - meteor.width, this.x + spread - meteor.width / 2));
+                    meteor.y = this.y + 48 + i * 8;
+                    meteor.speedY = 2.4 + this.level * 0.15 + Math.random() * 0.8;
+                    meteor.speedX = (Math.random() - 0.5) * 1.8;
+                    meteor.hp = Math.max(meteor.hp, 4 + this.level);
+                    meteor.maxHp = meteor.hp;
+                    enemies.push(meteor);
+                }
+
+                // 呼び出し演出
+                createExplosion(this.x, this.y + 34, '#a3a3a3', 8);
+                sfx.playExplosion(false);
+            }
+
+            for (let i = 0; i < this.parts.length; i++) {
+                let part = this.parts[i];
+                if (!part.active) continue;
+
+                const px = this.x + part.relX;
+                const py = this.y + part.relY;
+
+                if (this.timer % part.shootCooldown === 0) {
+                    if (part.id === 'split') {
+                        const angle = Math.PI / 2 + (Math.random() - 0.5) * 0.2;
+                        spawnFromPool(enemyBulletPool, b => b.spawn(
+                            px, py + 15,
+                            Math.cos(angle) * 3.2,
+                            Math.sin(angle) * 3.2,
+                            '#ff00aa', 7, true, 42
+                        ));
+                    } else if (part.id === 'aim') {
+                        const angle = Math.atan2(player.y - py, player.x - px);
+                        spawnFromPool(enemyBulletPool, b => b.spawn(
+                            px, py + 10,
+                            Math.cos(angle) * 5.4,
+                            Math.sin(angle) * 5.4,
+                            '#00f0ff', 3.5, false, 0
+                        ));
+                    } else if (part.id === 'random') {
+                        const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.8;
+                        const speed = Math.random() * 2.7 + 3.0;
+                        spawnFromPool(enemyBulletPool, b => b.spawn(
+                            px, py + 10,
+                            Math.cos(angle) * speed,
+                            Math.sin(angle) * speed,
+                            '#ffcc00', 3, false, 0
+                        ));
+                    }
+                }
+            }
+        }
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+
+            if (this.chargeState === 'telegraph') {
+                // 突進の予告: 進路を赤くハイライトし、機体を点滅させる
+                ctx.save();
+                ctx.fillStyle = 'rgba(255, 30, 60, 0.16)';
+                ctx.fillRect(-BOSS_CHARGE_FRONT_WIDTH, 40, BOSS_CHARGE_FRONT_WIDTH * 2, GAME_HEIGHT);
+                ctx.restore();
+                ctx.globalAlpha = (Math.floor(this.chargeTimer / 3) % 2 === 0) ? 0.3 : 1;
+            }
+
+            if (this.isInvulnerable) {
+                ctx.save();
+                ctx.strokeStyle = `rgba(255,255,255,${0.35 + Math.sin(this.timer * 0.3) * 0.2})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, 86 + Math.sin(this.timer * 0.18) * 5, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            if (this.currentHp > 0) {
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(this.parts[1].relX, this.parts[1].relY);
+                ctx.lineTo(this.parts[0].relX, this.parts[0].relY);
+                ctx.lineTo(this.parts[2].relX, this.parts[2].relY);
+                ctx.stroke();
+            }
+
+            for (let i = 0; i < this.parts.length; i++) {
+                let part = this.parts[i];
+                if (!part.active) {
+                    ctx.fillStyle = '#1e293b';
+                    ctx.strokeStyle = '#475569';
+                    ctx.lineWidth = 1;
+                    ctx.fillRect(part.relX - part.width / 2, part.relY - part.height / 2, part.width, part.height);
+                    ctx.strokeRect(part.relX - part.width / 2, part.relY - part.height / 2, part.width, part.height);
+
+                    if (Math.random() < 0.15) {
+                        spawnFromPool(particlePool, p => p.spawn(
+                            this.x + part.relX + (Math.random() - 0.5) * part.width,
+                            this.y + part.relY + (Math.random() - 0.5) * part.height,
+                            '#64748b'
+                        ));
+                    }
+                    continue;
+                }
+
+                ctx.save();
+                ctx.translate(part.relX, part.relY);
+
+                ctx.fillStyle = part.color;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+
+                if (part.id === 'split') {
+                    ctx.beginPath();
+                    ctx.moveTo(0, -part.height / 2);
+                    ctx.lineTo(part.width / 2, -part.height / 4);
+                    ctx.lineTo(part.width / 2, part.height / 4);
+                    ctx.lineTo(0, part.height / 2);
+                    ctx.lineTo(-part.width / 2, part.height / 4);
+                    ctx.lineTo(-part.width / 2, -part.height / 4);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.fillStyle = Math.sin(this.timer * 0.25) > 0 ? '#ffffff' : '#ff00aa';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (part.id === 'aim') {
+                    ctx.beginPath();
+                    ctx.moveTo(-part.width / 2, -part.height / 2);
+                    ctx.lineTo(part.width / 2, -part.height / 2);
+                    ctx.lineTo(0, part.height / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                } else if (part.id === 'random') {
+                    ctx.beginPath();
+                    ctx.moveTo(0, -part.height / 2);
+                    ctx.lineTo(part.width / 2, 0);
+                    ctx.lineTo(0, part.height / 2);
+                    ctx.lineTo(-part.width / 2, 0);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+
+            ctx.restore();
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Runtime collections
+    // ---------------------------------------------------------------
+    const player = new Player();
+    const enemies = [];
+    let boss = null;
+    let enemySpawnTimer = 0;
+
+    function spawnFormationWave() {
+        const fromLeft = Math.random() < 0.5;
+        const count = Math.min(FORMATION_ENEMY_MAX, FORMATION_ENEMY_COUNT + bossLevel * FORMATION_COUNT_PER_STAGE);
+        const spacingY = 26;
+        const speed = 8.5;
+
+        // 出現位置を上下方向にもランダム化。
+        const totalHeight = spacingY * (count - 1);
+        const minY = 105;
+        const maxY = Math.max(minY, GAME_HEIGHT * 0.68 - totalHeight);
+        const startY = minY + Math.random() * Math.max(0, maxY - minY);
+
+        // 3パターンをランダムに決定：
+        // 0 = 公転、1 = 自機狙い、2 = 直進
+        const moveType = Math.floor(Math.random() * 3);
+
+        for (let i = 0; i < count; i++) {
+            const enemy = new Enemy(3);
+            enemy.formationDirection = fromLeft ? 1 : -1;
+            enemy.formationMoveType = moveType;
+            enemy.formationBaseY = startY + i * spacingY;
+            enemy.formationPhase = i * 0.55;
+            enemy.orbitAngle = i * 0.55;
+
+            if (fromLeft) {
+                enemy.x = -enemy.width - 10 - i * 10;
+            } else {
+                enemy.x = GAME_WIDTH + 10 + i * 10;
+            }
+            enemy.y = enemy.formationBaseY;
+
+            if (moveType === 0) {
+                // 一回転しながらほぼ直進。
+                enemy.speedX = enemy.formationDirection * speed;
+                enemy.speedY = 0;
+                enemy.rotAngle = 0;
+                enemy.rotRemaining = Math.PI * 2;
+                enemy.rotSpeed = 0.16;
+            } else if (moveType === 1) {
+                // 自機方向へ少しずつ軌道修正。
+                enemy.speedX = enemy.formationDirection * speed * 0.86;
+                enemy.speedY = 0;
+                enemy.homingStrength = 0.11;
+                enemy.formSpeed = speed * 0.92;
+            } else {
+                // まっすぐ横切る。
+                enemy.speedX = enemy.formationDirection * speed;
+                enemy.speedY = 0.12;
+                enemy.rotAngle = 0;
+            }
+
+            enemies.push(enemy);
+        }
+
+        // 次回の左右は固定交互ではなく、毎回ランダム。
+        formationDirection = Math.random() < 0.5 ? -1 : 1;
+    }
+
+    // ---------------------------------------------------------------
+    // 05. Game flow / UI
+    // ---------------------------------------------------------------
+    function normalizeShipType(shipType) {
+        // 新形式は 0〜3。旧データに 4 が残っている場合は TYPE-4 に補正。
+        const n = Number(shipType);
+        if (!Number.isFinite(n)) return 0;
+        const index = Math.floor(n);
+        if (index >= 0 && index <= 3) return index;
+        if (index === 4) return 3;
+        return 0;
+    }
+
+    function getShipName(shipType) {
+        return SHIP_NAMES[normalizeShipType(shipType)] || SHIP_NAMES[0];
+    }
+
+    function getShipEmoji(shipType) {
+        return SHIP_EMOJIS[normalizeShipType(shipType)] || SHIP_EMOJIS[0];
+    }
+
+    function cleanRankingName(name) {
+        return String(name || 'PLAYER').trim().replace(/[<>]/g, '').slice(0, 10) || 'PLAYER';
+    }
+
+    function cacheRanking(ranking) {
+        try {
+            localStorage.setItem(RANKING_KEY, JSON.stringify(ranking.slice(0, RANKING_LIMIT)));
+        } catch {}
+    }
+
+    function loadCachedRanking() {
+        try {
+            const data = JSON.parse(localStorage.getItem(RANKING_KEY) || '[]');
+            return Array.isArray(data) ? data.filter(row => row && Number.isFinite(Number(row.score))) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    async function loadRanking(force = false) {
+        const now = Date.now();
+        if (!force && rankingCache && now - rankingCacheTime < RANKING_CACHE_TTL) {
+            return rankingCache;
+        }
+        try {
+            const response = await fetch(`${SUPABASE_SCORES_URL}?select=player_name,score,ship_type,created_at&order=score.desc,created_at.asc&limit=${RANKING_LIMIT}`, {
+                method: 'GET',
+                headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+                },
+                cache: 'no-store'
+            });
+
+            if (!response.ok) {
+                throw new Error(`Supabase GET ${response.status}`);
+            }
+
+            const rows = await response.json();
+            const ranking = rows.map(row => ({
+                name: cleanRankingName(row.player_name),
+                score: Number(row.score) || 0,
+                shipType: normalizeShipType(row.ship_type),
+                date: row.created_at ? Date.parse(row.created_at) : Date.now()
+            }));
+
+            rankingOnline = true;
+            rankingCache = ranking;
+            rankingCacheTime = now;
+            cacheRanking(ranking);
+            return ranking;
+        } catch (error) {
+            console.warn('Online ranking unavailable; using local cache.', error);
+            rankingOnline = false;
+            const cached = loadCachedRanking();
+            rankingCache = cached;
+            rankingCacheTime = now;
+            return cached;
+        }
+    }
+
+    async function saveRanking(name, value, shipType) {
+        const cleanName = cleanRankingName(name);
+        const cleanScore = Math.max(0, Math.floor(Number(value) || 0));
+        const cleanShipType = normalizeShipType(shipType);
+
+        try {
+            // 検証と「自己ベストのみ更新」はDB側の関数(submit_score)で行う。
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_score`, {
+                method: 'POST',
+                headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    p_name: cleanName,
+                    p_score: cleanScore,
+                    p_ship_type: cleanShipType
+                })
+            });
+
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(`Supabase RPC ${response.status}: ${message}`);
+            }
+
+            const data = await response.json();
+            rankingOnline = true;
+            rankingCache = null;
+            rankingCacheTime = 0;
+
+            if (data && data.status === 'kept') {
+                return { ok: true, updated: false, bestScoreKept: true, oldScore: Number(data.old_score) || 0 };
+            }
+            return { ok: true, updated: true, bestScoreKept: false };
+        } catch (error) {
+            console.error('Online score submission failed.', error);
+            rankingOnline = false;
+
+            const ranking = loadCachedRanking();
+            const localIndex = ranking.findIndex(row => String(row.name).trim().toLowerCase() === cleanName.toLowerCase());
+            const localRow = {
+                name: cleanName,
+                score: cleanScore,
+                shipType: cleanShipType,
+                date: Date.now()
+            };
+
+            if (localIndex >= 0) {
+                if (cleanScore > Number(ranking[localIndex].score || 0)) {
+                    ranking[localIndex] = localRow;
+                }
+            } else {
+                ranking.push(localRow);
+            }
+
+            ranking.sort((a, b) => Number(b.score) - Number(a.score) || Number(a.date) - Number(b.date));
+            cacheRanking(ranking);
+            return { ok: false, updated: false, bestScoreKept: false };
+        }
+    }
+
+    async function renderRanking() {
+        ui.rankingList.innerHTML = '<div class="py-5 text-xs text-slate-500">ランキングを読み込み中...</div>';
+        const ranking = await loadRanking();
+
+        if (ranking.length === 0) {
+            ui.rankingList.innerHTML = '<div class="py-5 text-xs text-slate-500">まだランキングがありません</div>';
+            return;
+        }
+
+        ui.rankingList.innerHTML = ranking.map((row, index) => {
+            const rank = index + 1;
+            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : String(rank).padStart(2, '0');
+            const name = String(row.name || 'PLAYER').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+            const shipName = getShipName(row.shipType);
+            const shipEmoji = getShipEmoji(row.shipType);
+            return `<div class="grid grid-cols-[40px_1fr_100px] items-center gap-2 bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-2 text-left ${rank <= 3 ? 'border-cyan-500/30' : ''}">
+                <span class="text-center text-xs text-cyan-300 font-bold">${medal}</span>
+                <div class="min-w-0">
+                    <div class="text-xs text-slate-200 truncate">${name}</div>
+                    <div class="text-[9px] text-slate-500 truncate">${shipEmoji} ${shipName}</div>
+                </div>
+                <span class="text-right text-xs text-yellow-300 font-mono">${String(Number(row.score)).padStart(6, '0')}</span>
+            </div>`;
+        }).join('');
+
+        const subtitle = ui.ranking.querySelector('[data-ranking-status]');
+        if (subtitle) {
+            subtitle.innerText = rankingOnline ? 'ONLINE SCORE BOARD' : 'OFFLINE CACHE';
+        }
+    }
+
+    async function openRankingScreen() {
+        ui.title.classList.add('hidden');
+        ui.gameover.classList.add('hidden');
+        ui.ranking.classList.remove('hidden');
+        await renderRanking();
+    }
+
+    function closeRankingScreen() {
+        ui.ranking.classList.add('hidden');
+        ui.title.classList.remove('hidden');
+    }
+
+    async function submitCurrentScore() {
+        if (rankingSubmitted) return;
+
+        const name = ui.rankingNameInput.value || 'PLAYER';
+        ui.rankingSubmitStatus.innerText = '';
+        ui.submitRanking.disabled = true;
+        ui.submitRanking.innerText = 'SENDING...';
+
+        const result = await saveRanking(name, score, selectedShipType);
+
+        rankingSubmitted = true;
+
+        if (result.ok && result.bestScoreKept) {
+            ui.submitRanking.innerText = 'BEST SCORE KEPT ✓';
+            ui.rankingSubmitStatus.innerText = `現在のベストスコア ${String(result.oldScore).padStart(6, '0')} を維持しました。`;
+        } else if (result.ok && result.updated) {
+            ui.submitRanking.innerText = 'SCORE UPDATED ✓';
+            ui.rankingSubmitStatus.innerText = '自己ベストを更新しました！';
+        } else if (result.ok) {
+            ui.submitRanking.innerText = 'REGISTERED ✓';
+            ui.rankingSubmitStatus.innerText = '';
+        } else {
+            ui.submitRanking.innerText = 'SAVED LOCALLY';
+            ui.rankingSubmitStatus.innerText = 'オンライン登録に失敗したため、この端末に一時保存しました。';
+        }
+        ui.gameover.classList.add('hidden');
+        ui.ranking.classList.remove('hidden');
+        await renderRanking();
+    }
+
+    function defeatBoss() {
+        if (!boss) return;
+        
+        boss.active = false;
+        score += 6000;
+
+        // タイムボーナス: 早く倒すほど加算
+        const clearSec = bossFightMs / 1000;
+        const timeBonus = Math.max(0, Math.round((BOSS_TIME_BONUS_PAR_SEC - clearSec) * BOSS_TIME_BONUS_PER_SEC / 10) * 10);
+        score += timeBonus;
+        ui.stageBonus.textContent = timeBonus > 0
+            ? `CLEAR TIME ${clearSec.toFixed(1)}s  /  TIME BONUS +${timeBonus}`
+            : `CLEAR TIME ${clearSec.toFixed(1)}s  /  NO TIME BONUS`;
+        isBossActive = false;
+        gameElapsedMs = 0;
+        formationSpawnTimer = 0;
+        
+        sfx.playExplosion(true);
+        createExplosion(boss.x, boss.y, '#c084fc', 60);
+        boss = null;
+
+        if (passiveLevels.bossHeal > 0 && player.lives < player.maxLives) {
+            player.lives++;
+            createDamageText(player.x + player.width / 2, player.y - 10, 'HP+1', '#4ade80', true);
+        }
+
+        bossLevel++;
+        stageUpTimer = 150;
+        sfx.playUpgrade();
+        ui.stageBanner.classList.remove('hidden');
+        updateHUD(true);
+    }
+
+    function buildUpgradeOptions() {
+    const options = ['shot', 'rate', 'crit', 'hp'];
+
+    const isMaxed = t => (t === 'shot' && shotPowerLevel >= 4) ||
+        (t === 'rate' && fireRateLevel >= 4) || (t === 'crit' && critLevel >= 5);
+
+    // 置き換える枠を選ぶ。武器・パッシブがまだ入っていない枠のうち、
+    // 強化MAXで選べない枠があればそこを優先する。
+    const pickReplaceIndex = () => {
+        let candidates = options.map((o, i) => i)
+            .filter(i => !options[i].startsWith('weapon:') && !options[i].startsWith('passive:'));
+        const maxed = candidates.filter(i => isMaxed(options[i]));
+        if (maxed.length > 0) candidates = maxed;
+        return candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : -1;
+    };
+
+    // 武器を3つ未満所持していて、40%の確率に当選したら未取得武器を1枠出す
+    const upgradableWeapons = ownedWeapons.filter(id => (weaponLevels[id] || 1) < weaponMaxLevel(id));
+    if ((ownedWeapons.length < MAX_WEAPONS || upgradableWeapons.length > 0) && Math.random() < WEAPON_OFFER_CHANCE) {
+        const newWeapons = ownedWeapons.length < MAX_WEAPONS
+            ? Object.keys(WEAPON_DEFS).filter(id => !ownedWeapons.includes(id))
+            : [];
+        const availableWeapons = newWeapons.concat(upgradableWeapons);
+
+        if (availableWeapons.length > 0) {
+            const replaceIndex = pickReplaceIndex();
+            if (replaceIndex >= 0) {
+                const weaponId = availableWeapons[Math.floor(Math.random() * availableWeapons.length)];
+                options[replaceIndex] = `weapon:${weaponId}`;
+            }
+        }
+    }
+
+    // パッシブスキルを1枠だけ出す
+    if (Math.random() < PASSIVE_OFFER_CHANCE) {
+        const availablePassives = Object.keys(PASSIVE_DEFS)
+            .filter(id => passiveLevels[id] < PASSIVE_DEFS[id].maxLevel);
+
+        if (availablePassives.length > 0) {
+            const replaceIndex = pickReplaceIndex();
+            if (replaceIndex >= 0) {
+                const passiveId = availablePassives[Math.floor(Math.random() * availablePassives.length)];
+                options[replaceIndex] = `passive:${passiveId}`;
+            }
+        }
+    }
+
+    return options;
+}
+
+function configureUpgradeSlot(slotIndex, type) {
+    const slot = ui.upgradeSlots[slotIndex];
+
+    slot.button.disabled = false;
+
+    if (type.startsWith('weapon:')) {
+        const weaponId = type.substring(7);
+        const weapon = WEAPON_DEFS[weaponId];
+
+        slot.icon.innerText = weapon.icon;
+        slot.title.innerText = weapon.title;
+        slot.desc.innerText = weapon.desc;
+        slot.badge.innerText = ownedWeapons.includes(weaponId)
+            ? `WEAPON LV.${weaponLevels[weaponId] || 1}→${(weaponLevels[weaponId] || 1) + 1}`
+            : `WEAPON ${ownedWeapons.length + 1}/${MAX_WEAPONS}`;
+        slot.status.innerText = '取得する';
+
+        return;
+    }
+
+    if (type.startsWith('passive:')) {
+        const id = type.substring(8);
+        const def = PASSIVE_DEFS[id];
+
+        slot.icon.innerText = def.icon;
+        slot.title.innerText = def.title;
+        slot.desc.innerText = def.desc();
+        slot.badge.innerText = def.maxLevel > 1
+            ? `PASSIVE LV.${passiveLevels[id]}/${def.maxLevel}`
+            : 'PASSIVE';
+        slot.status.innerText = '取得する';
+
+        return;
+    }
+
+    if (type === 'shot') {
+        slot.icon.innerText = '⚡';
+        slot.title.innerText = '射撃パワー';
+        slot.desc.innerText = '弾数・範囲 ＆ 威力UP';
+        slot.badge.innerText = `LV.${shotPowerLevel}/4`;
+
+        if (shotPowerLevel >= 4) {
+            slot.button.disabled = true;
+            slot.status.innerText = 'MAX REACHED';
+        } else {
+            slot.status.innerText = '選択する';
+        }
+
+    } else if (type === 'rate') {
+        slot.icon.innerText = '🔥';
+        slot.title.innerText = '発射レート';
+        slot.desc.innerText = '連射速度を限界まで高速化';
+        slot.badge.innerText = `LV.${fireRateLevel}/4`;
+
+        if (fireRateLevel >= 4) {
+            slot.button.disabled = true;
+            slot.status.innerText = 'MAX REACHED';
+        } else {
+            slot.status.innerText = '選択する';
+        }
+
+    } else if (type === 'crit') {
+        slot.icon.innerText = '🎯';
+        slot.title.innerText = 'クリティカル';
+        slot.desc.innerText = '会心率+5% (ダメージ1.5倍)';
+        slot.badge.innerText = `LV.${critLevel}/5`;
+
+        if (critLevel >= 5) {
+            slot.button.disabled = true;
+            slot.status.innerText = 'MAX REACHED';
+        } else {
+            slot.status.innerText = '選択する';
+        }
+
+    } else if (type === 'hp') {
+        slot.icon.innerText = '💖';
+
+        if (hpUpgradesCount < 3) {
+            slot.title.innerText = '最大HP＆全回復';
+            slot.desc.innerText = `最大HP+1 ＆ 体力回復 (現在:${player.maxLives})`;
+            slot.badge.innerText = `UP:${hpUpgradesCount}/3`;
+        } else {
+            slot.title.innerText = 'HP回復';
+            slot.desc.innerText = `機体を修理 HP+1 (HP:${player.lives}/${player.maxLives})`;
+            slot.badge.innerText = 'UNLIMITED';
+        }
+
+        slot.status.innerText = '選択する';
+    }
+}
+
+let upgradeRerollUsed = false;   // アップグレード画面ごとに1回だけリロール可能
+
+function applyUpgradeOptions(options) {
+    for (let i = 0; i < ui.upgradeSlots.length; i++) {
+        currentUpgradeOptions[i] = options[i];
+        configureUpgradeSlot(i, options[i]);
+    }
+}
+
+function updateRerollButton() {
+    ui.rerollButton.disabled = upgradeRerollUsed;
+    ui.rerollButton.textContent = upgradeRerollUsed ? '🔄 REROLL USED' : '🔄 REROLL (1)';
+}
+
+function rerollUpgradeOptions() {
+    if (gameState !== STATE_UPGRADE || upgradeRerollUsed) return;
+    upgradeRerollUsed = true;
+
+    // 現在と同じ並びにならないよう、数回引き直す(出せる候補が無ければそのまま)
+    const before = currentUpgradeOptions.join('|');
+    let options = buildUpgradeOptions();
+    for (let i = 0; i < 12 && options.join('|') === before; i++) {
+        options = buildUpgradeOptions();
+    }
+
+    applyUpgradeOptions(options);
+    updateRerollButton();
+    sfx.playUpgrade();
+}
+
+function openUpgradeModal() {
+    gameState = STATE_UPGRADE;
+
+    upgradeRerollUsed = false;
+    applyUpgradeOptions(buildUpgradeOptions());
+    updateRerollButton();
+
+    ui.upgrade.classList.remove('hidden');
+}
+
+function selectUpgradeSlot(slotIndex) {
+    const type = currentUpgradeOptions[slotIndex];
+    if (!type) return;
+
+    if (type.startsWith('weapon:')) {
+        const weaponId = type.substring(7);
+
+        if (WEAPON_DEFS[weaponId] && ownedWeapons.includes(weaponId)) {
+            if ((weaponLevels[weaponId] || 1) < weaponMaxLevel(weaponId)) {
+                weaponLevels[weaponId] = (weaponLevels[weaponId] || 1) + 1;
+            }
+        } else if (WEAPON_DEFS[weaponId] && ownedWeapons.length < MAX_WEAPONS) {
+            ownedWeapons.push(weaponId);
+            weaponOwned[weaponId] = true;
+            weaponLevels[weaponId] = 1;
+            updateDroneButton();
+        }
+    } else if (type.startsWith('passive:')) {
+        const id = type.substring(8);
+        if (PASSIVE_DEFS[id] && passiveLevels[id] < PASSIVE_DEFS[id].maxLevel) {
+            passiveLevels[id]++;
+            if (id === 'shield') {
+                shieldTimerMs = 0;
+                player.shield = true;   // 取得した瞬間から1枚持った状態にする
+            }
+        }
+    } else if (type === 'shot' && shotPowerLevel < 4) {
+        shotPowerLevel++;
+
+    } else if (type === 'rate' && fireRateLevel < 4) {
+        fireRateLevel++;
+
+    } else if (type === 'crit' && critLevel < 5) {
+        critLevel++;
+
+    } else if (type === 'hp') {
+        if (hpUpgradesCount < 3) {
+            hpUpgradesCount++;
+            player.maxLives++;
+            player.lives = player.maxLives;               // 強化中は最大HP+1 ＆ 全回復
+        } else {
+            player.lives = Math.min(player.maxLives, player.lives + 1);   // MAX後はHP+1のみ
+        }
+    }
+
+    sfx.playUpgrade();
+
+    ui.upgrade.classList.add('hidden');
+    updateHUD(true);
+    gameState = STATE_PLAYING;
+}
+    function selectUpgrade(type) {
+        if (type === 'shot' && shotPowerLevel < 4) {
+            shotPowerLevel++;
+        } else if (type === 'rate' && fireRateLevel < 4) {
+            fireRateLevel++;
+        } else if (type === 'crit' && critLevel < 5) {
+            critLevel++;
+        } else if (type === 'hp') {
+            if (hpUpgradesCount < 3) {
+                hpUpgradesCount++;
+                player.maxLives++;
+                player.lives = player.maxLives;
+            } else {
+                player.lives = Math.min(player.maxLives, player.lives + 1);
+            }
+        }
+
+        sfx.playUpgrade();
+        ui.upgrade.classList.add('hidden');
+        updateHUD(true);
+        gameState = STATE_PLAYING;
+    }
+
+    function openShipSelectScreen() {
+        sfx.init();
+        ui.title.classList.add('hidden');
+        ui.gameover.classList.add('hidden');
+        ui.shipSelect.classList.remove('hidden');
+    }
+
+    function confirmShipSelect(shipTypeIndex) {
+        selectedShipType = shipTypeIndex;
+        ui.shipSelect.classList.add('hidden');
+        startGame();
+    }
+
+function startGame() {
+    score = 0;
+    upgradeCount = 0;
+    nextUpgradeScore = getUpgradeStep();
+
+    bossLevel = 0;
+    gameElapsedMs = 0;
+    formationSpawnTimer = 0;
+    enemySpawnTimer = 0;
+    formationDirection = -1;
+
+    lastFrameTime = performance.now();
+
+    isBossActive = false;
+    bossWarningTimer = 0;
+    stageUpTimer = 0;
+    boss = null;
+
+    shotPowerLevel = 1;
+    fireRateLevel = 1;
+    critLevel = 0;
+    hpUpgradesCount = 0;
+
+    ownedWeapons.length = 0;
+    clearWeaponFlags();
+    resetPassives();
+    weaponTimers.drill = 0;
+            weaponTimers.electro = 0;
+            weaponTimers.homing = 0;
+            homingBurstRemaining = 0;
+            homingShotTimer = 0;
+            wiperX = WIPER_X_MIN;
+    weaponTimers.electro = 0;
+    weaponTimers.homing = 0;
+    homingBurstRemaining = 0;
+    homingShotTimer = 0;
+    electricLinks.length = 0;
+    wiperHitTimers.clear();
+    tronTrail.length = 0;
+    tronHitTimers.clear();
+    laserBeams.length = 0;
+    weaponTimers.laser = 0;
+    sniperState.aimTimer = 0;
+    sniperState.target = null;
+    sniperState.isPart = false;
+    sniperState.flash = null;
+    weaponTimers.sniper = 0;
+    for (const k of Object.keys(weaponLevels)) delete weaponLevels[k];
+    dronePos.length = 0;
+    playerPath.length = 0;
+    orbitAngle = 0;
+    droneMode = 0;
+    weaponTimers.machinegun = weaponTimers.drone = 0;
+    mgBurst = MG_BURST_FRAMES;
+    mgRest = 0;
+    updateDroneButton();
+
+    [playerBulletPool, enemyBulletPool, particlePool, damageTextPool].forEach(pool => {
+        for (let i = 0; i < pool.length; i++) {
+            pool[i].active = false;
+        }
+        poolCursors.set(pool, 0);
+    });
+
+    enemies.length = 0;
+
+    player.reset();
+    player.shipType = selectedShipType;
+        
+        updateHUD();
+        
+        ui.title.classList.add('hidden');
+        ui.gameover.classList.add('hidden');
+        ui.ranking.classList.add('hidden');
+        ui.upgrade.classList.add('hidden');
+        ui.bossHud.classList.add('hidden');
+        ui.bossWarning.classList.add('hidden');
+        ui.stageBanner.classList.add('hidden');
+        ui.hud.classList.remove('hidden');
+
+        gameState = STATE_PLAYING;
+    }
+
+    function triggerGameOver() {
+        gameState = STATE_GAMEOVER;
+        rankingSubmitted = false;
+        ui.rankingNameInput.value = '';
+        ui.rankingSubmitStatus.innerText = '';
+        ui.submitRanking.disabled = false;
+        ui.submitRanking.innerText = 'SUBMIT SCORE';
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('retro_space_high_opt', highScore);
+        }
+
+        ui.finalScore.innerText = String(score).padStart(6, '0');
+        ui.gameover.classList.remove('hidden');
+        ui.hud.classList.add('hidden');
+        ui.bossHud.classList.add('hidden');
+        ui.upgrade.classList.add('hidden');
+    }
+
+
+    function setPaused(paused) {
+        if (paused) {
+            if (gameState !== STATE_PLAYING) return;
+            gameState = STATE_PAUSED;
+            ui.pauseScreen.classList.remove('hidden');
+            ui.pauseButton.textContent = 'RESUME';
+        } else {
+            if (gameState !== STATE_PAUSED) return;
+            gameState = STATE_PLAYING;
+            ui.pauseScreen.classList.add('hidden');
+            ui.pauseButton.textContent = 'PAUSE';
+            lastFrameTime = performance.now();
+            if (typeof resetPauseTitleConfirm === 'function') resetPauseTitleConfirm();
+        }
+    }
+
+    function togglePause() {
+        if (gameState === STATE_PLAYING) setPaused(true);
+        else if (gameState === STATE_PAUSED) setPaused(false);
+    }
+
+    function returnToTitle() {
+        gameState = STATE_TITLE;
+        ui.pauseButton.textContent = 'PAUSE';
+        isTouching = false;
+        isFiringTouch = false;
+        touchX = null;
+        touchY = null;
+        // 進行中のプレイを破棄(タイトル背景に敵や弾が残らないように)
+        boss = null;
+        isBossActive = false;
+        bossWarningTimer = 0;
+        stageUpTimer = 0;
+        enemies.length = 0;
+        [playerBulletPool, enemyBulletPool, particlePool, damageTextPool].forEach(pool => {
+            for (let i = 0; i < pool.length; i++) pool[i].active = false;
+            poolCursors.set(pool, 0);
+        });
+        electricLinks.length = 0;
+        ui.gameover.classList.add('hidden');
+        ui.ranking.classList.add('hidden');
+        ui.title.classList.remove('hidden');
+        ui.hud.classList.add('hidden');
+        ui.bossHud.classList.add('hidden');
+        ui.bossWarning.classList.add('hidden');
+        ui.pauseScreen.classList.add('hidden');
+        ui.stageBanner.classList.add('hidden');
+        ui.upgrade.classList.add('hidden');
+        ui.high.innerText = String(highScore).padStart(6, '0');
+    }
+
+    function updateHUD(force = false) {
+        const stage = bossLevel + 1;
+        const lives = player.lives;
+
+        if (force || score !== lastHudScore) {
+            ui.score.innerText = String(score).padStart(6, '0');
+            lastHudScore = score;
+        }
+        if (force || highScore !== Number(ui.high.textContent || 0)) {
+            ui.high.innerText = String(highScore).padStart(6, '0');
+        }
+        if (force || stage !== lastHudStage) {
+            ui.stage.innerText = String(stage);
+            lastHudStage = stage;
+        }
+        if (force || lives !== lastHudLives) {
+            ui.lives.innerText = '❤️️'.repeat(Math.max(0, lives));
+            lastHudLives = lives;
+        }
+
+        // 取得中のパッシブ表示(キルラッシュ発動中/シールド状態も反映)
+        let passiveText = '';
+        for (const id of Object.keys(PASSIVE_DEFS)) {
+            const lv = passiveLevels[id];
+            if (lv <= 0) continue;
+            passiveText += PASSIVE_DEFS[id].icon + (PASSIVE_DEFS[id].maxLevel > 1 ? lv : '');
+            if (id === 'killCrit' && killCritTimers.length > 0) passiveText += '🔥×' + killCritTimers.length;
+            if (id === 'shield') passiveText += player.shield ? '✔' : Math.max(0, Math.ceil((SHIELD_INTERVAL_MS - shieldTimerMs) / 1000)) + 's';
+            passiveText += ' ';
+        }
+        if (force || passiveText !== lastPassiveText) {
+            ui.passiveStatus.textContent = passiveText;
+            lastPassiveText = passiveText;
+        }
+
+        if (boss && boss.active) {
+            if (ui.bossHud.classList.contains('hidden')) ui.bossHud.classList.remove('hidden');
+            const hpPercent = Math.max(0, Math.floor((boss.currentHp / boss.maxHp) * 100));
+            if (force || hpPercent !== lastBossHpPercent) {
+                ui.bossHpBar.style.width = hpPercent + '%';
+                ui.bossHpText.innerText = hpPercent + '%';
+                lastBossHpPercent = hpPercent;
+            }
+        } else if (!ui.bossHud.classList.contains('hidden')) {
+            ui.bossHud.classList.add('hidden');
+            lastBossHpPercent = -1;
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // 06. Collision / update / render
+    // ---------------------------------------------------------------
+    function checkCollisions() {
+        // 1フレーム中は同じ計算結果を使い回す。
+        // 弾の矩形境界も1回だけ算出し、敵数・弾数が多い場面での反復計算を削減。弾数が増えたときの乗算・Map参照を削減。
+        const lowHpPower = getLowHpPowerMultiplier();
+        const critBaseChance = critLevel * 0.05 + getCritChanceBonus();
+        // Player Bullets vs Enemy Bullets (Type 2: center blade only)
+        for (let i = 0; i < playerBulletPool.length; i++) {
+            const pb = playerBulletPool[i];
+            if (!pb.active || pb.type !== 'blade' || !pb.canGuard) continue;
+
+            for (let j = 0; j < enemyBulletPool.length; j++) {
+                const eb = enemyBulletPool[j];
+                if (!eb.active) continue;
+
+                const dx = pb.x - eb.x;
+                const dy = pb.y - eb.y;
+                const hitRadius = pb.width * 0.5 + eb.radius;
+                if (dx * dx + dy * dy < hitRadius * hitRadius) {
+                    eb.active = false;
+                    createExplosion(eb.x, eb.y, '#ffffff', 3);
+                }
+            }
+        }
+
+        // Player Bullets vs Enemies
+        for (let i = 0; i < playerBulletPool.length; i++) {
+            const bullet = playerBulletPool[i];
+            if (!bullet.active) continue;
+
+            const bulletType = bullet.type;
+            const isPierce = (bulletType === 'blade' || bulletType === 'drill');
+            const halfW = (bulletType === 'blade' || bulletType === 'drill') ? bullet.width * 0.5 : bullet.radius;
+            const halfH = (bulletType === 'blade' || bulletType === 'drill') ? bullet.height * 0.5 : bullet.radius;
+            const bulletLeft = bullet.x - halfW;
+            const bulletRight = bullet.x + halfW;
+            const bulletTop = bullet.y - halfH;
+            const bulletBottom = bullet.y + halfH;
+
+            for (let j = 0; j < enemies.length; j++) {
+                const enemy = enemies[j];
+                if (!enemy.active) continue;
+
+                if (isPierce && bullet.hitSet.has(enemy)) continue;
+
+                if (bulletRight > enemy.x && bulletLeft < enemy.x + enemy.width &&
+                    bulletBottom > enemy.y && bulletTop < enemy.y + enemy.height) {
+                    
+                    if (!isPierce) bullet.active = false;
+                    else bullet.hitSet.add(enemy);
+
+                    const critChance = critBaseChance + critLevel * 0.05 * ((bullet.critChanceMultiplier || 1) - 1);
+                    const critRoll = rollCrit(critChance, bulletCritMult(bullet));
+                    const isCrit = critRoll.tiers > 0;
+                    const baseDamage = (bulletType === 'drill' ? shotPowerLevel * 3 : shotPowerLevel) * (bullet.dmgMult || 1) * lowHpPower;
+                    const damage = baseDamage * critRoll.mult;
+                    const dmgColor = critRoll.tiers >= 2 ? '#ff9900' : (isCrit ? '#ff0055' : '#ffff00');
+
+                    enemy.hp -= damage;
+                    
+                    createDamageText(bullet.x, bullet.y, Math.max(1, Math.round(damage)), dmgColor, isCrit);
+                    createExplosion(bullet.x, bullet.y, bullet.color, 3);
+
+                    if (enemy.hp <= 0) {
+                        enemy.active = false;
+                        onEnemyKilled();
+                        score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                        sfx.playExplosion(false);
+                        createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color, 12);
+                    }
+                    if (!isPierce) break;
+                }
+            }
+
+            // Player Bullets vs Boss Parts
+            if (bullet.active && boss && boss.active && !boss.isInvulnerable) {
+                for (let j = 0; j < boss.parts.length; j++) {
+                    const part = boss.parts[j];
+                    if (!part.active) continue;
+
+                    if (isPierce && bullet.hitSet.has(part)) continue;
+
+                    const partX = boss.x + part.relX - part.width / 2;
+                    const partY = boss.y + part.relY - part.height / 2;
+                    if (bulletRight > partX && bulletLeft < partX + part.width &&
+                        bulletBottom > partY && bulletTop < partY + part.height) {
+                        
+                        if (!isPierce) bullet.active = false;
+                        else bullet.hitSet.add(part);
+
+                        const critChance = critBaseChance + critLevel * 0.05 * ((bullet.critChanceMultiplier || 1) - 1);
+                        const critRoll = rollCrit(critChance, bulletCritMult(bullet));
+                        const isCrit = critRoll.tiers > 0;
+                        const baseDamage = (bullet.type === 'drill' ? shotPowerLevel * 3 : shotPowerLevel) * (bullet.dmgMult || 1) * lowHpPower;
+                        const damage = baseDamage * critRoll.mult;
+                        const dmgColor = critRoll.tiers >= 2 ? '#ff9900' : (isCrit ? '#ff0055' : '#ffff00');
+
+                        part.hp -= damage;
+
+                        createDamageText(bullet.x, bullet.y, Math.max(1, Math.round(damage)), dmgColor, isCrit);
+                        createExplosion(bullet.x, bullet.y, part.color, 3);
+
+                        if (part.hp <= 0) {
+                            part.active = false;
+                            score += 1500;
+                            sfx.playExplosion(false);
+                            createExplosion(boss.x + part.relX, boss.y + part.relY, part.color, 22);
+
+                            if (boss.currentHp <= 0) {
+                                defeatBoss();
+                                break;
+                            }
+                        }
+                        if (!isPierce) break;
+                    }
+                }
+            }
+        }
+
+        // Enemy Bullets vs Player
+        for (let i = 0; i < enemyBulletPool.length; i++) {
+            const bullet = enemyBulletPool[i];
+            if (!bullet.active) continue;
+
+            if (bullet.x > player.x && bullet.x < player.x + player.width &&
+                bullet.y > player.y && bullet.y < player.y + player.height) {
+                
+                bullet.active = false;
+                player.hit();
+            }
+        }
+
+        // Enemies vs Player
+        for (let i = 0; i < enemies.length; i++) {
+            const enemy = enemies[i];
+            if (!enemy.active) continue;
+
+            if (enemy.x < player.x + player.width && enemy.x + enemy.width > player.x &&
+                enemy.y < player.y + player.height && enemy.y + enemy.height > player.y) {
+                
+                enemy.active = false;
+                createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color, 16);
+                player.hit();
+            }
+        }
+    }
+
+    // 突進中のボス本体(生存中のパーツ)と自機の接触
+    function checkBossChargeCollision() {
+        if (!boss || !boss.active || boss.chargeState !== 'charge') return;
+        for (let i = 0; i < boss.parts.length; i++) {
+            const part = boss.parts[i];
+            if (!part.active) continue;
+            const px = boss.x + part.relX - part.width / 2;
+            const py = boss.y + part.relY - part.height / 2;
+            if (px < player.x + player.width && px + part.width > player.x &&
+                py < player.y + player.height && py + part.height > player.y) {
+                player.hit();
+                return;
+            }
+        }
+    }
+
+    // 分裂隕石(type 4)が倒されたら、破片(type 5)を左右に1つずつ出す。
+    // 撃破方法(通常弾・各武器)を問わず、HPが尽きて消えた時点でここで拾う。
+    function spawnSplitFragments(parent) {
+        parent.splitDone = true;
+        const cx = parent.x + parent.width * 0.5;
+        const cy = parent.y + parent.height * 0.5;
+        for (const dir of [-1, 1]) {
+            const frag = new Enemy(5);
+            frag.x = cx - frag.width * 0.5;
+            frag.y = cy - frag.height * 0.5;
+            frag.speedX = dir * (1.8 + Math.random());
+            enemies.push(frag);
+        }
+    }
+
+    function compactEnemies() {
+        let writeIdx = 0;
+        for (let readIdx = 0; readIdx < enemies.length; readIdx++) {
+            const e = enemies[readIdx];
+            if (!e.active && e.type === 4 && e.hp <= 0 && !e.splitDone) spawnSplitFragments(e);
+            if (e.active) {
+                enemies[writeIdx++] = e;
+            }
+        }
+        enemies.length = writeIdx;
+    }
+
+    function updateWeapons() {
+        // DRILL: 自機左右から大型ドリル弾を2発、自動発射
+        if (hasWeapon('drill')) {
+            if (weaponTimers.drill > 0) {
+                weaponTimers.drill--;
+            } else {
+                const cx = player.x + player.width * 0.5;
+                const y = player.y + 4;
+
+                const fireDrill = (x) => {
+                    spawnFromPool(playerBulletPool, b => {
+                        b.spawn(x, y, 0, -9, '#00f0ff', 10, false, 0, 'drill', 120, 22, 38, 1, 1);
+                    });
+                };
+
+                fireDrill(cx - 15);
+                fireDrill(cx + 15);
+                weaponTimers.drill = weaponCooldown('drill');
+            }
+        }
+
+        // ELECTRO: 最寄りの敵から最大4体へ一度だけ連鎖。
+        // electricLinksには今回の1イベントの命中済み敵を記録し、A→B→Aを防ぐ。
+        if (hasWeapon('electro')) {
+            if (weaponTimers.electro > 0) {
+                weaponTimers.electro--;
+            } else {
+                const cx = player.x + player.width * 0.5;
+                const cy = player.y + player.height * 0.5;
+                // 射程内で最も近い敵を1回の走査で探す。
+                // 以前の filter → sort は毎回配列を作っていたため、敵数が多いほど無駄が増えていた。
+                let first = null;
+                let firstD2 = ELECTRO_RANGE * ELECTRO_RANGE;
+                for (const enemy of enemies) {
+                    if (!enemy.active) continue;
+                    const dx = enemy.x + enemy.width * 0.5 - cx;
+                    const dy = enemy.y + enemy.height * 0.5 - cy;
+                    const d2 = dx * dx + dy * dy;
+                    if (d2 <= firstD2) {
+                        firstD2 = d2;
+                        first = enemy;
+                    }
+                }
+
+                if (first) {
+                    const chain = [first];
+                    const maxChain = 4;
+                    const chainRange2 = ELECTRO_CHAIN_RANGE * ELECTRO_CHAIN_RANGE;
+                    const electroRange2 = ELECTRO_RANGE * ELECTRO_RANGE;
+
+                    while (chain.length < maxChain) {
+                        const last = chain[chain.length - 1];
+                        const lx = last.x + last.width * 0.5;
+                        const ly = last.y + last.height * 0.5;
+                        let best = null;
+                        let bestD2 = chainRange2;
+
+                        for (const candidate of enemies) {
+                            if (!candidate.active || chain.includes(candidate)) continue;
+                            // 連鎖先も、自機から射程(ELECTRO_RANGE)内の敵に限る(最適化前の挙動)
+                            const pdx = candidate.x + candidate.width * 0.5 - cx;
+                            const pdy = candidate.y + candidate.height * 0.5 - cy;
+                            if (pdx * pdx + pdy * pdy > electroRange2) continue;
+                            const dx = candidate.x + candidate.width * 0.5 - lx;
+                            const dy = candidate.y + candidate.height * 0.5 - ly;
+                            const d2 = dx * dx + dy * dy;
+                            if (d2 < bestD2) {
+                                bestD2 = d2;
+                                best = candidate;
+                            }
+                        }
+                        if (!best) break;
+                        chain.push(best);
+                    }
+
+                    electricLinks.length = 0;
+                    for (let i = 0; i < chain.length; i++) {
+                        const enemy = chain[i];
+                        if (!enemy.active) continue;
+                        enemy.hp -= shotPowerLevel * 1.5 * getLowHpPowerMultiplier();
+                        createDamageText(enemy.x + enemy.width * 0.5, enemy.y, Math.round(shotPowerLevel * 1.5 * getLowHpPowerMultiplier()), '#c084fc', false);
+                        createExplosion(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.5, '#a855f7', 5);
+
+                        if (enemy.hp <= 0) {
+                            enemy.active = false;
+                            onEnemyKilled();
+                            score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                            sfx.playExplosion(false);
+                            createExplosion(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.5, enemy.color, 12);
+                        }
+
+                        if (i > 0) {
+                            const prev = chain[i - 1];
+                            electricLinks.push({
+                                x1: prev.x + prev.width * 0.5,
+                                y1: prev.y + prev.height * 0.5,
+                                x2: enemy.x + enemy.width * 0.5,
+                                y2: enemy.y + enemy.height * 0.5,
+                                life: 10
+                            });
+                        }
+                    }
+                    electricLinks.unshift({
+                        x1: cx, y1: cy,
+                        x2: first.x + first.width * 0.5,
+                        y2: first.y + first.height * 0.5,
+                        life: 10
+                    });
+                    weaponTimers.electro = weaponCooldown('electro');
+                }
+            }
+        }
+
+        // WIPER: 左から右へ一定速度で移動する縦棒
+        if (hasWeapon('wiper')) {
+            wiperX += WIPER_SPEED;
+            if (wiperX > WIPER_X_MAX) {
+                wiperX = WIPER_X_MIN;
+            }
+
+            const cx = player.x + player.width * 0.5;
+            const cy = player.y + player.height * 0.5;
+            const barX = cx + wiperX;
+            const topY = player.y - WIPER_REACH;
+            const bottomY = player.y + 4;
+
+            for (const enemy of enemies) {
+                if (!enemy.active) continue;
+
+                const ex = enemy.x + enemy.width * 0.5;
+                const ey = enemy.y + enemy.height * 0.5;
+
+                if (
+                    Math.abs(ex - barX) <= enemy.width * 0.5 + 6 &&
+                    ey >= topY - enemy.height * 0.5 &&
+                    ey <= bottomY + enemy.height * 0.5
+                ) {
+                    const last = wiperHitTimers.get(enemy) || 0;
+                    if (last <= 0) {
+                        const dmg = Math.max(1, Math.round(shotPowerLevel * 0.7 * getLowHpPowerMultiplier()));
+                        enemy.hp -= dmg;
+                        wiperHitTimers.set(enemy, 8);
+                        createDamageText(ex, ey, dmg, '#86efac', false);
+
+                        if (enemy.hp <= 0) {
+                            enemy.active = false;
+                            onEnemyKilled();
+                            score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                            createExplosion(ex, ey, enemy.color, 10);
+                        }
+                    }
+                }
+            }
+
+            for (const eb of enemyBulletPool) {
+                if (!eb.active) continue;
+
+                if (
+                    eb.x + eb.radius >= barX - 6 &&
+                    eb.x - eb.radius <= barX + 6 &&
+                    eb.y + eb.radius >= topY &&
+                    eb.y - eb.radius <= bottomY
+                ) {
+                    eb.active = false;
+                }
+            }
+
+            for (const [enemy, timer] of wiperHitTimers) {
+                if (!enemy.active || timer <= 1) wiperHitTimers.delete(enemy);
+                else wiperHitTimers.set(enemy, timer - 1);
+            }
+        }
+
+        // TRON: 自機の軌跡が光の壁になり、触れた敵・ボスパーツにダメージ。
+        if (hasWeapon('tron')) {
+            tronTrail.push({
+                x: player.x + player.width * 0.5,
+                y: player.y + player.height * 0.5,
+                life: TRON_TRAIL_LIFE
+            });
+            for (let i = 0; i < tronTrail.length; i++) tronTrail[i].life--;
+            while (tronTrail.length > 0 && tronTrail[0].life <= 0) tronTrail.shift();
+
+            // 自機のすぐ近くは判定しない(出した直後に自分の壁で当たり続けるのを避ける意味はないが、
+            // 描画と判定を揃えるため、すべての線分を対象にする)。
+            const tronDamage = () => Math.max(1, Math.round(shotPowerLevel * 0.6 * getLowHpPowerMultiplier()));
+            const touchesWall = (cx, cy, radius) => {
+                const r = radius + TRON_WALL_HALF_WIDTH;
+                const r2 = r * r;
+                if (tronTrail.length === 1) {
+                    const a = tronTrail[0];
+                    return (cx - a.x) * (cx - a.x) + (cy - a.y) * (cy - a.y) <= r2;
+                }
+                for (let i = 1; i < tronTrail.length; i++) {
+                    const a = tronTrail[i - 1];
+                    const b = tronTrail[i];
+                    if (distToSegmentSq(cx, cy, a.x, a.y, b.x, b.y) <= r2) return true;
+                }
+                return false;
+            };
+
+            for (const enemy of enemies) {
+                if (!enemy.active) continue;
+                const ex = enemy.x + enemy.width * 0.5;
+                const ey = enemy.y + enemy.height * 0.5;
+                if ((tronHitTimers.get(enemy) || 0) > 0) continue;
+                if (!touchesWall(ex, ey, Math.min(enemy.width, enemy.height) * 0.5)) continue;
+
+                const dmg = tronDamage();
+                enemy.hp -= dmg;
+                tronHitTimers.set(enemy, TRON_HIT_INTERVAL);
+                createDamageText(ex, ey, dmg, '#67e8f9', false);
+
+                if (enemy.hp <= 0) {
+                    enemy.active = false;
+                    onEnemyKilled();
+                    score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                    createExplosion(ex, ey, enemy.color, 10);
+                }
+            }
+
+            if (boss && boss.active && !boss.isInvulnerable) {
+                for (const part of boss.parts) {
+                    if (!part.active) continue;
+                    if ((tronHitTimers.get(part) || 0) > 0) continue;
+                    const px = boss.x + part.relX;
+                    const py = boss.y + part.relY;
+                    if (!touchesWall(px, py, Math.min(part.width, part.height) * 0.5)) continue;
+
+                    const dmg = tronDamage();
+                    part.hp -= dmg;
+                    tronHitTimers.set(part, TRON_HIT_INTERVAL);
+                    createDamageText(px, py, dmg, '#67e8f9', false);
+
+                    if (part.hp <= 0) {
+                        part.active = false;
+                        score += 1500;
+                        sfx.playExplosion(false);
+                        createExplosion(px, py, part.color, 22);
+                        if (boss.currentHp <= 0) {
+                            defeatBoss();
+                            break;
+                        }
+                    }
+                }
+            }
+
+            for (const [target, timer] of tronHitTimers) {
+                if (timer <= 1 || target.active === false) tronHitTimers.delete(target);
+                else tronHitTimers.set(target, timer - 1);
+            }
+        }
+
+        // LASER: ランダムな向きへ光線を発射。壁で反射し、短時間残って線上の標的にダメージ。
+        if (hasWeapon('laser')) {
+            if (weaponTimers.laser > 0) {
+                weaponTimers.laser--;
+            } else {
+                const cx = player.x + player.width * 0.5;
+                const cy = player.y + 4;
+                for (let i = 0; i < LASER_BEAMS; i++) {
+                    const angle = (Math.random() * 2 - 1) * LASER_SPREAD;
+                    laserBeams.push({
+                        pts: buildLaserPath(cx, cy, angle),
+                        life: LASER_LIFE,
+                        hits: new Map()
+                    });
+                }
+                weaponTimers.laser = weaponCooldown('laser');
+            }
+
+            const laserDamage = () => Math.max(1, Math.round(shotPowerLevel * 0.8 * getLowHpPowerMultiplier()));
+            const onBeam = (pts, cx, cy, radius) => {
+                const r = radius + LASER_HALF_WIDTH;
+                const r2 = r * r;
+                for (let i = 1; i < pts.length; i++) {
+                    const a = pts[i - 1];
+                    const b = pts[i];
+                    if (distToSegmentSq(cx, cy, a.x, a.y, b.x, b.y) <= r2) return true;
+                }
+                return false;
+            };
+
+            for (const beam of laserBeams) {
+                for (const enemy of enemies) {
+                    if (!enemy.active) continue;
+                    if ((beam.hits.get(enemy) || 0) > 0) continue;
+                    const ex = enemy.x + enemy.width * 0.5;
+                    const ey = enemy.y + enemy.height * 0.5;
+                    if (!onBeam(beam.pts, ex, ey, Math.min(enemy.width, enemy.height) * 0.5)) continue;
+
+                    const dmg = laserDamage();
+                    enemy.hp -= dmg;
+                    beam.hits.set(enemy, LASER_HIT_INTERVAL);
+                    createDamageText(ex, ey, dmg, '#fda4af', false);
+
+                    if (enemy.hp <= 0) {
+                        enemy.active = false;
+                        onEnemyKilled();
+                        score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                        createExplosion(ex, ey, enemy.color, 10);
+                    }
+                }
+
+                if (boss && boss.active && !boss.isInvulnerable) {
+                    for (const part of boss.parts) {
+                        if (!part.active) continue;
+                        if ((beam.hits.get(part) || 0) > 0) continue;
+                        const px = boss.x + part.relX;
+                        const py = boss.y + part.relY;
+                        if (!onBeam(beam.pts, px, py, Math.min(part.width, part.height) * 0.5)) continue;
+
+                        const dmg = laserDamage();
+                        part.hp -= dmg;
+                        beam.hits.set(part, LASER_HIT_INTERVAL);
+                        createDamageText(px, py, dmg, '#fda4af', false);
+
+                        if (part.hp <= 0) {
+                            part.active = false;
+                            score += 1500;
+                            sfx.playExplosion(false);
+                            createExplosion(px, py, part.color, 22);
+                            if (boss.currentHp <= 0) {
+                                defeatBoss();
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                for (const [target, timer] of beam.hits) {
+                    if (timer <= 1) beam.hits.delete(target);
+                    else beam.hits.set(target, timer - 1);
+                }
+                beam.life--;
+            }
+
+            for (let i = laserBeams.length - 1; i >= 0; i--) {
+                if (laserBeams[i].life <= 0) laserBeams.splice(i, 1);
+            }
+        }
+
+        // SNIPER: 最もHPの高い標的を約1秒追尾して狙い、貫通する一撃を放つ。
+        if (hasWeapon('sniper')) {
+            if (sniperState.flash) {
+                sniperState.flash.life--;
+                if (sniperState.flash.life <= 0) sniperState.flash = null;
+            }
+
+            if (weaponTimers.sniper > 0) {
+                weaponTimers.sniper--;
+            } else {
+                if (!sniperTargetValid()) pickSniperTarget();
+
+                if (!sniperState.target) {
+                    sniperState.aimTimer = 0;
+                } else {
+                    sniperState.aimTimer++;
+                    if (sniperState.aimTimer >= SNIPER_AIM_FRAMES) {
+                        const sx = player.x + player.width * 0.5;
+                        const sy = player.y + 4;
+                        const tp = sniperTargetPos();
+                        let dx = tp.x - sx;
+                        let dy = tp.y - sy;
+                        let dist = Math.hypot(dx, dy);
+                        if (dist < 1) { dx = 0; dy = -1; dist = 1; }
+                        const ex = sx + (dx / dist) * SNIPER_RANGE;
+                        const ey = sy + (dy / dist) * SNIPER_RANGE;
+
+                        const rollSniperDamage = () => {
+                            const critChance = (critLevel * 0.05 + getCritChanceBonus()) * CRIT_RATE_MULT_SNIPER;
+                            const critRoll = rollCrit(critChance, CRIT_MULT_SNIPER);
+                            const damage = shotPowerLevel * SNIPER_DAMAGE_MULT * getLowHpPowerMultiplier() * critRoll.mult;
+                            const color = critRoll.tiers >= 2 ? '#ff9900' : (critRoll.tiers > 0 ? '#ff0055' : '#fde047');
+                            return { damage, color, isCrit: critRoll.tiers > 0 };
+                        };
+
+                        for (const enemy of enemies) {
+                            if (!enemy.active) continue;
+                            const cx = enemy.x + enemy.width * 0.5;
+                            const cy = enemy.y + enemy.height * 0.5;
+                            const r = Math.min(enemy.width, enemy.height) * 0.5 + SNIPER_HALF_WIDTH;
+                            if (distToSegmentSq(cx, cy, sx, sy, ex, ey) > r * r) continue;
+
+                            const hit = rollSniperDamage();
+                            enemy.hp -= hit.damage;
+                            createDamageText(cx, cy, Math.max(1, Math.round(hit.damage)), hit.color, hit.isCrit);
+
+                            if (enemy.hp <= 0) {
+                                enemy.active = false;
+                                onEnemyKilled();
+                                score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                                createExplosion(cx, cy, enemy.color, 10);
+                            }
+                        }
+
+                        if (boss && boss.active && !boss.isInvulnerable) {
+                            for (const part of boss.parts) {
+                                if (!part.active) continue;
+                                const px = boss.x + part.relX;
+                                const py = boss.y + part.relY;
+                                const r = Math.min(part.width, part.height) * 0.5 + SNIPER_HALF_WIDTH;
+                                if (distToSegmentSq(px, py, sx, sy, ex, ey) > r * r) continue;
+
+                                const hit = rollSniperDamage();
+                                part.hp -= hit.damage;
+                                createDamageText(px, py, Math.max(1, Math.round(hit.damage)), hit.color, hit.isCrit);
+
+                                if (part.hp <= 0) {
+                                    part.active = false;
+                                    score += 1500;
+                                    sfx.playExplosion(false);
+                                    createExplosion(px, py, part.color, 22);
+                                    if (boss.currentHp <= 0) {
+                                        defeatBoss();
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        sniperState.flash = { x1: sx, y1: sy, x2: ex, y2: ey, life: SNIPER_FLASH_FRAMES };
+                        sniperState.aimTimer = 0;
+                        sniperState.target = null;
+                        sniperState.isPart = false;
+                        weaponTimers.sniper = weaponCooldown('sniper');
+                    }
+                }
+            }
+        }
+
+        // MACHINEGUN: 機体の両側から、広くばらけた小弾を連射。一定時間撃つと止まり、クールダウンを挟む。
+        if (hasWeapon('machinegun')) {
+            if (mgRest > 0) {
+                mgRest--;
+                if (mgRest === 0) mgBurst = MG_BURST_FRAMES;
+            } else {
+                if (weaponTimers.machinegun > 0) {
+                    weaponTimers.machinegun--;
+                } else {
+                    for (const sx of [player.x + 4, player.x + player.width - 4]) {
+                        const a = (Math.random() * 2 - 1) * MG_SPREAD;
+                        const sp = 10 + Math.random() * 2;
+                        spawnFromPool(playerBulletPool, b => {
+                            b.spawn(sx, player.y + 8, Math.sin(a) * sp, -Math.cos(a) * sp, '#fde68a', 2, false, 0, 'normal', MG_LIFE, 4, 4, 1, 1);
+                            b.dmgMult = MG_DAMAGE_MULT;
+                        });
+                    }
+                    weaponTimers.machinegun = weaponCooldown('machinegun');
+                }
+                mgBurst--;
+                if (mgBurst <= 0) {
+                    mgRest = mgRestFrames();
+                    weaponTimers.machinegun = 0;
+                }
+            }
+        }
+
+        // DRONE: 追従方法(droneMode)に応じた位置から前方へ射撃。レベル=機数。
+        dronePos.length = 0;
+        if (hasWeapon('drone')) {
+            const pcx = player.x + player.width * 0.5;
+            const pcy = player.y + player.height * 0.5;
+            playerPath.push({ x: pcx, y: pcy });
+            if (playerPath.length > TRAIL_GAP_FRAMES * 4 + 2) playerPath.shift();
+            orbitAngle += ORBIT_SPEED;
+            const n = weaponLevels.drone || 1;
+
+            for (let i = 0; i < n; i++) {
+                if (droneMode === 0) {
+                    const a = orbitAngle + (i / n) * Math.PI * 2;
+                    dronePos.push({ x: pcx + Math.cos(a) * ORBIT_RADIUS, y: pcy + Math.sin(a) * ORBIT_RADIUS });
+                } else if (droneMode === 1) {
+                    const idx = Math.max(0, playerPath.length - 1 - (i + 1) * TRAIL_GAP_FRAMES);
+                    const q = playerPath[idx] || { x: pcx, y: pcy };
+                    dronePos.push({ x: q.x, y: q.y });
+                } else {
+                    const o = WING_OFFSETS[n - 1][i];
+                    dronePos.push({ x: pcx + o.dx, y: pcy + o.dy });
+                }
+            }
+
+            if (weaponTimers.drone > 0) {
+                weaponTimers.drone--;
+            } else {
+                for (const q of dronePos) {
+                    spawnFromPool(playerBulletPool, b => {
+                        b.spawn(q.x, q.y, 0, -11, DRONE_COLORS[droneMode], 3, false, 0, 'normal', 999, 6, 6, 1, 1);
+                        b.dmgMult = DRONE_DAMAGE_MULT;
+                    });
+                }
+                weaponTimers.drone = weaponCooldown('drone');
+            }
+        }
+
+        // HOMING: 左右交互に1発ずつ連射(計4発)。各弾は途中で3発に分裂する。
+        if (hasWeapon('homing')) {
+            if (homingBurstRemaining > 0) {
+                if (homingShotTimer > 0) {
+                    homingShotTimer--;
+                } else {
+                    const cx = player.x + player.width * 0.5;
+                    homingSideToggle = !homingSideToggle;
+                    const side = homingSideToggle ? 1 : -1;
+                    spawnFromPool(playerBulletPool, b => {
+                        b.spawn(cx + side * 12, player.y, side * 1.6, -7.2, '#ffb347', 5, true, 32, 'homing', 120, 10, 10, 1, 1);
+                        b.splitWeapon = true;
+                    });
+                    homingBurstRemaining--;
+                    homingShotTimer = HOMING_SHOT_INTERVAL;
+                    if (homingBurstRemaining === 0) weaponTimers.homing = weaponCooldown('homing');
+                }
+            } else if (weaponTimers.homing > 0) {
+                weaponTimers.homing--;
+            } else {
+                homingBurstRemaining = HOMING_BURST_COUNT;
+                homingShotTimer = 0;
+            }
+        }
+
+        // 電撃の表示を少しずつ消す。
+        for (let i = electricLinks.length - 1; i >= 0; i--) {
+            electricLinks[i].life--;
+            if (electricLinks[i].life <= 0) electricLinks.splice(i, 1);
+        }
+    }
+
+    function update() {
+        const now = performance.now();
+        const deltaMs = Math.min(100, Math.max(0, now - lastFrameTime));
+        lastFrameTime = now;
+
+        for (let i = 0; i < stars.length; i++) {
+            const star = stars[i];
+            star.y += star.speed;
+            if (star.y > GAME_HEIGHT) {
+                star.y = 0;
+                star.x = Math.random() * GAME_WIDTH;
+            }
+        }
+
+        if (gameState !== STATE_PLAYING) return;
+
+        gameElapsedMs += deltaMs;
+        if (!isBossActive && !boss) formationSpawnTimer += deltaMs;
+        if (boss && boss.active && !boss.isInvulnerable) bossFightMs += deltaMs;
+
+        for (let i = killCritTimers.length - 1; i >= 0; i--) {
+            killCritTimers[i] -= deltaMs;
+            if (killCritTimers[i] <= 0) killCritTimers.splice(i, 1);
+        }
+        if (passiveLevels.shield > 0 && !player.shield) {
+            shieldTimerMs += deltaMs;
+            if (shieldTimerMs >= SHIELD_INTERVAL_MS) {
+                player.shield = true;
+                shieldTimerMs = 0;
+                sfx.playUpgrade();
+            }
+        }
+
+        // ボス戦中（登場演出・戦闘中）はアップグレード画面を出さない。
+        // スコア条件を満たしていても nextUpgradeScore は進めず、ボス撃破後にまとめて判定する。
+        if (!isBossActive && !boss && score >= nextUpgradeScore) {
+            // 次の閾値 = 現在の閾値 + その時点の必要量(段階的に増加、上限20000)
+            while (nextUpgradeScore <= score) {
+                upgradeCount++;
+                nextUpgradeScore += getUpgradeStep();
+            }
+            openUpgradeModal();
+            return;
+        }
+
+        // Bosses appear every 60 seconds of active gameplay.
+        if (!isBossActive && gameElapsedMs >= bossIntervalMs) {
+            gameElapsedMs -= bossIntervalMs;
+            formationSpawnTimer = 0;
+            isBossActive = true;
+            bossWarningTimer = 100;
+            sfx.playWarning();
+            ui.bossWarning.classList.remove('hidden');
+        }
+
+        if (bossWarningTimer > 0) {
+            bossWarningTimer--;
+            if (bossWarningTimer === 0) {
+                ui.bossWarning.classList.add('hidden');
+                boss = new Boss(bossLevel);
+                bossFightMs = 0;
+            }
+        }
+
+        if (stageUpTimer > 0) {
+            stageUpTimer--;
+            if (stageUpTimer === 0) {
+                ui.stageBanner.classList.add('hidden');
+            }
+        }
+
+        player.update();
+      　updateWeapons();
+
+        if (!isBossActive && !boss) {
+            enemySpawnTimer++;
+            if (enemySpawnTimer > getEnemySpawnInterval()) {
+                enemySpawnTimer = 0;
+                const rand = Math.random();
+                // 0=通常 2=隕石 4=分裂隕石 1=重装
+                let type = rand < 0.40 ? 0 : (rand < 0.65 ? 2 : (rand < 0.77 ? 4 : 1));
+                if (type === 0 && bossLevel >= 1 && Math.random() < MISSILE_SHIP_REPLACE_CHANCE) type = 6;
+                enemies.push(new Enemy(type));
+            }
+
+            // 10秒ごとに左右交互で高速編隊を投入
+            if (formationSpawnTimer >= 10000) {
+                formationSpawnTimer -= 10000;
+                spawnFormationWave();
+            }
+        }
+
+        let len = playerBulletPool.length;
+        for (let i = 0; i < len; i++) { const b = playerBulletPool[i]; if (b.active) b.update(); }
+        len = enemyBulletPool.length;
+        for (let i = 0; i < len; i++) { const b = enemyBulletPool[i]; if (b.active) b.update(); }
+        len = particlePool.length;
+        for (let i = 0; i < len; i++) { const fx = particlePool[i]; if (fx.active) fx.update(); }
+        len = damageTextPool.length;
+        for (let i = 0; i < len; i++) { const fx = damageTextPool[i]; if (fx.active) fx.update(); }
+        len = enemies.length;
+        for (let i = 0; i < len; i++) { const enemy = enemies[i]; if (enemy.active) enemy.update(); }
+        
+        compactEnemies();
+
+        if (boss) boss.update();
+
+        checkCollisions();
+        checkBossChargeCollision();
+        // Update UI at a lower cadence; gameplay remains frame-perfect.
+        if ((++hudFrame & 7) === 0) updateHUD();
+    }
+
+    function render() {
+        renderFrame++;
+        ctx.fillStyle = '#020205';
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+        for (let i = 0; i < stars.length; i++) {
+            const star = stars[i];
+            ctx.fillStyle = star.color;
+            ctx.fillRect(star.x, star.y, star.size, star.size);
+        }
+
+        if (gameState === STATE_PLAYING || gameState === STATE_UPGRADE || gameState === STATE_PAUSED) {
+            player.draw();
+        }
+
+        for (let i = 0; i < playerBulletPool.length; i++) if (playerBulletPool[i].active) playerBulletPool[i].draw();
+        for (let i = 0; i < enemyBulletPool.length; i++) if (enemyBulletPool[i].active) enemyBulletPool[i].draw();
+        for (let i = 0; i < enemies.length; i++) if (enemies[i].active) enemies[i].draw();
+        if (boss) boss.draw();
+
+        // WIPER visual: 縦棒だけを左 -> 右へ移動
+        if (gameState === STATE_PLAYING && hasWeapon('wiper')) {
+            const cx = player.x + player.width * 0.5;
+            const cy = player.y + player.height * 0.5;
+            const barX = cx + wiperX;
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(134,239,172,0.9)';
+            ctx.shadowColor = '#22c55e';
+            ctx.shadowBlur = 8;
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(barX, player.y - WIPER_REACH);
+            ctx.lineTo(barX, player.y + 4);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // TRON visual: 軌跡の光の壁(古いほど薄く細く)
+        if (gameState === STATE_PLAYING && hasWeapon('tron') && tronTrail.length > 1) {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.shadowColor = '#22d3ee';
+            ctx.shadowBlur = 10;
+            for (let i = 1; i < tronTrail.length; i++) {
+                const a = tronTrail[i - 1];
+                const b = tronTrail[i];
+                const k = Math.max(0, Math.min(1, b.life / TRON_TRAIL_LIFE));
+                const fade = k < 0.25 ? k / 0.25 : 1;
+                ctx.strokeStyle = `rgba(103,232,249,${(0.25 + 0.65 * fade).toFixed(3)})`;
+                ctx.lineWidth = 3 + 7 * k;
+                ctx.beginPath();
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // LASER visual: 反射した光線を、時間とともに細く薄くする
+        if (gameState === STATE_PLAYING && laserBeams.length) {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowColor = '#f43f5e';
+            ctx.shadowBlur = 12;
+            for (const beam of laserBeams) {
+                const k = Math.max(0, Math.min(1, beam.life / LASER_LIFE));
+                ctx.beginPath();
+                ctx.moveTo(beam.pts[0].x, beam.pts[0].y);
+                for (let i = 1; i < beam.pts.length; i++) ctx.lineTo(beam.pts[i].x, beam.pts[i].y);
+                ctx.strokeStyle = `rgba(244,63,94,${(0.35 + 0.55 * k)})`;
+                ctx.lineWidth = 3 + 6 * k;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = `rgba(255,241,242,${(0.5 + 0.5 * k)})`;
+                ctx.lineWidth = 1 + 2 * k;
+                ctx.stroke();
+                ctx.shadowBlur = 12;
+            }
+            ctx.restore();
+        }
+
+        // SNIPER visual: 狙い中は予告線と照準、発射後は射線のフラッシュ
+        if (gameState === STATE_PLAYING && hasWeapon('sniper')) {
+            if (weaponTimers.sniper === 0 && sniperState.target && sniperTargetValid()) {
+                const sx = player.x + player.width * 0.5;
+                const sy = player.y + 4;
+                const tp = sniperTargetPos();
+                const k = Math.min(1, sniperState.aimTimer / SNIPER_AIM_FRAMES);
+
+                ctx.save();
+                ctx.strokeStyle = `rgba(250,204,21,${(0.25 + 0.55 * k)})`;
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([6, 6]);
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(tp.x, tp.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                const ring = tp.r + 6 + 22 * (1 - k);
+                ctx.strokeStyle = `rgba(250,204,21,${(0.5 + 0.5 * k)})`;
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 8;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(tp.x, tp.y, ring, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(tp.x - ring - 6, tp.y);
+                ctx.lineTo(tp.x - ring + 6, tp.y);
+                ctx.moveTo(tp.x + ring - 6, tp.y);
+                ctx.lineTo(tp.x + ring + 6, tp.y);
+                ctx.moveTo(tp.x, tp.y - ring - 6);
+                ctx.lineTo(tp.x, tp.y - ring + 6);
+                ctx.moveTo(tp.x, tp.y + ring - 6);
+                ctx.lineTo(tp.x, tp.y + ring + 6);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            if (sniperState.flash) {
+                const f = sniperState.flash;
+                const k = Math.max(0, f.life / SNIPER_FLASH_FRAMES);
+                ctx.save();
+                ctx.lineCap = 'round';
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 14;
+                ctx.strokeStyle = `rgba(250,204,21,${(0.4 + 0.5 * k)})`;
+                ctx.lineWidth = 4 + 6 * k;
+                ctx.beginPath();
+                ctx.moveTo(f.x1, f.y1);
+                ctx.lineTo(f.x2, f.y2);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = `rgba(255,255,255,${(0.5 + 0.5 * k)})`;
+                ctx.lineWidth = 1.5 + 2 * k;
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // MACHINEGUN ゲージ: 連射中は残り、クールダウン中は回復の進み具合
+        if (gameState === STATE_PLAYING && hasWeapon('machinegun')) {
+            const resting = mgRest > 0;
+            const k = resting ? 1 - mgRest / mgRestFrames() : mgBurst / MG_BURST_FRAMES;
+            ctx.save();
+            ctx.fillStyle = 'rgba(15,23,42,0.7)';
+            ctx.fillRect(8, GAME_HEIGHT - 30, 60, 5);
+            ctx.fillStyle = resting ? '#f87171' : '#fde68a';
+            ctx.fillRect(8, GAME_HEIGHT - 30, 60 * Math.max(0, Math.min(1, k)), 5);
+            ctx.font = '9px monospace';
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillText(resting ? 'MG COOLING' : 'MG', 72, GAME_HEIGHT - 25);
+            ctx.restore();
+        }
+
+        // DRONE visual + 現在の追従方法ラベル
+        if (gameState === STATE_PLAYING && hasWeapon('drone')) {
+            ctx.save();
+            ctx.fillStyle = DRONE_COLORS[droneMode];
+            ctx.shadowColor = DRONE_COLORS[droneMode];
+            ctx.shadowBlur = 8;
+            for (const q of dronePos) {
+                ctx.beginPath();
+                ctx.arc(q.x, q.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(`DRONE: ${DRONE_MODE_NAMES[droneMode]}  [E]`, 8, GAME_HEIGHT - 8);
+            ctx.restore();
+        }
+
+        // ELECTRO visual
+        if (electricLinks.length) {
+            ctx.save();
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#a855f7';
+            ctx.shadowBlur = 10;
+            for (const link of electricLinks) {
+                const jitter = () => (Math.random() - 0.5) * 8;
+                ctx.strokeStyle = link.life > 5 ? '#e9d5ff' : '#a855f7';
+                ctx.beginPath();
+                ctx.moveTo(link.x1, link.y1);
+                const mx = (link.x1 + link.x2) * 0.5 + jitter();
+                const my = (link.y1 + link.y2) * 0.5 + jitter();
+                ctx.lineTo(mx, my);
+                ctx.lineTo(link.x2, link.y2);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        for (let i = 0; i < particlePool.length; i++) if (particlePool[i].active) particlePool[i].draw();
+        for (let i = 0; i < damageTextPool.length; i++) if (damageTextPool[i].active) damageTextPool[i].draw();
+    }
+
+    // ---------------------------------------------------------------
+    // 07. Input / events / boot
+    // ---------------------------------------------------------------
+    let rafId = 0;
+    function gameLoop() {
+        // Skip expensive canvas work while the tab is hidden.
+        if (!document.hidden) {
+            update();
+            render();
+        }
+        rafId = requestAnimationFrame(gameLoop);
+    }
+
+    window.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        keys[e.key] = true;
+
+        if (e.code === 'KeyE' && !e.repeat) cycleDroneMode();
+
+        if (e.code === 'KeyP' || e.code === 'Escape') {
+            e.preventDefault();
+            togglePause();
+        }
+    });
+
+    window.addEventListener('keyup', e => {
+        keys[e.code] = false;
+        keys[e.key] = false;
+    });
+
+    const container = document.getElementById('game-container');
+    let canvasRect = canvas.getBoundingClientRect();
+    let sx = GAME_WIDTH / canvasRect.width;
+    let sy = GAME_HEIGHT / canvasRect.height;
+    
+    window.addEventListener('resize', () => {
+        canvasRect = canvas.getBoundingClientRect(); 
+        sx = GAME_WIDTH / canvasRect.width; 
+        sy = GAME_HEIGHT / canvasRect.height;
+    }, { passive: true });
+
+    function updateTouchPos(e) {
+        if (!e.touches || e.touches.length === 0) return;
+        const clientX = e.touches[0].clientX;
+        const clientY = e.touches[0].clientY;
+        touchX = (clientX - canvasRect.left) * sx;
+        touchY = (clientY - canvasRect.top) * sy;
+    }
+
+    container.addEventListener('touchstart', e => {
+        if (gameState !== STATE_PLAYING) return;
+        if (e.target.closest('#touch-controls') || e.target.closest('#screen-upgrade') || e.target.closest('#screen-select-ship')) return;
+        isTouching = true;
+        updateTouchPos(e);
+    }, { passive: true });
+
+    container.addEventListener('touchmove', e => {
+        if (!isTouching) return;
+        if (e.target.closest('#touch-controls') || e.target.closest('#screen-upgrade') || e.target.closest('#screen-select-ship')) return;
+        updateTouchPos(e);
+    }, { passive: true });
+
+    container.addEventListener('touchend', e => {
+        if (!e.touches || e.touches.length === 0) {
+            isTouching = false;
+            touchX = null;
+            touchY = null;
+        }
+    }, { passive: true });
+
+    ui.touchFireButton.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        isFiringTouch = true;
+    });
+    ui.touchFireButton.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        isFiringTouch = false;
+    });
+    ui.touchFireButton.addEventListener('mousedown', () => { isFiringTouch = true; });
+    ui.touchFireButton.addEventListener('mouseup', () => { isFiringTouch = false; });
+    ui.touchFireButton.addEventListener('mouseleave', () => { isFiringTouch = false; });
+
+    const modeBtn = document.getElementById('btn-touch-mode');
+    modeBtn.addEventListener('touchstart', (e) => { e.preventDefault(); cycleDroneMode(); });
+    modeBtn.addEventListener('click', () => cycleDroneMode());
+
+    ui.upgradeSlots.forEach((slot, index) => {
+        slot.button.addEventListener('click', () => selectUpgradeSlot(index));
+    });
+    ui.rerollButton.addEventListener('click', rerollUpgradeOptions);
+
+    ui.pauseButton.addEventListener('click', togglePause);
+    ui.resumeButton.addEventListener('click', () => setPaused(false));
+    let pauseTitleConfirmTimer = 0;
+    function resetPauseTitleConfirm() {
+        clearTimeout(pauseTitleConfirmTimer);
+        ui.pauseTitleButton.textContent = 'BACK TO TITLE';
+        ui.pauseTitleButton.dataset.confirm = '';
+    }
+    ui.pauseTitleButton.addEventListener('click', () => {
+        if (gameState !== STATE_PAUSED) return;
+        if (ui.pauseTitleButton.dataset.confirm === '1') {
+            resetPauseTitleConfirm();
+            returnToTitle();
+            return;
+        }
+        ui.pauseTitleButton.dataset.confirm = '1';
+        ui.pauseTitleButton.textContent = 'TAP AGAIN TO QUIT';
+        pauseTitleConfirmTimer = setTimeout(resetPauseTitleConfirm, 3000);
+    });
+    ui.startButton.addEventListener('click', openShipSelectScreen);
+    ui.restartButton.addEventListener('click', openShipSelectScreen);
+    ui.titleButton.addEventListener('click', returnToTitle);
+    ui.titleRankingButton.addEventListener('click', openRankingScreen);
+    ui.rankingCloseButton.addEventListener('click', closeRankingScreen);
+    ui.submitRanking.addEventListener('click', submitCurrentScore);
+    ui.rankingNameInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') submitCurrentScore();
+    });
+
+    // Ship selection buttons are data-driven instead of using inline HTML handlers.
+    ui.shipSelect.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-ship-type]');
+        if (!button) return;
+        confirmShipSelect(Number(button.dataset.shipType));
+    });
+
+    ui.high.innerText = String(highScore).padStart(6, '0');
+
+    rafId = requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
