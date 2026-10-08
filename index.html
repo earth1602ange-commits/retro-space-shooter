@@ -6,7 +6,7 @@
     <title>RETRO SPACE SHOOTER - 無料ブラウザシューティングゲーム</title>
     <meta name="description"
           content="無料で遊べるレトロ風ブラウザシューティングゲーム。高速編隊や60秒ごとに登場するボスを撃破してハイスコアを目指そう！">
-    <!-- RETRO SPACE SHOOTER VERSION: v1.5.13 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.5.14 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -106,7 +106,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.5.13</div>
+        <div class="version-badge" aria-label="Game version">v1.5.14</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -582,6 +582,11 @@ upgradeButtons: {
     const ENEMY_SPAWN_INTERVAL_FRAMES = 27;   // 小さいほど通常敵が多く出る
     const FORMATION_ENEMY_COUNT = 9;          // 高速編隊1回あたりの数(ステージ1)
     // ステージ(=ボス撃破数+1)が進むごとの敵の増加
+    // ミサイル艦(type 6)と、そのミサイル(type 7)
+    const MISSILE_SPEED = 3.6;          // ミサイルの速さ
+    const MISSILE_TURN_RATE = 0.04;     // 1フレームあたりの最大旋回角(小さいほど避けやすい)
+    const MISSILE_LIFE_FRAMES = 260;    // ミサイルが自爆するまでの時間
+    const MISSILE_SHIP_REPLACE_CHANCE = 0.25; // ステージ2以降、通常敵の一部がミサイル艦になる割合
     const ENEMY_SPAWN_MIN_INTERVAL_FRAMES = 12;   // 通常敵の出現間隔の下限
     const ENEMY_SPAWN_STEP_PER_STAGE = 2;         // 1ステージごとに短くなる間隔(フレーム)
     const FORMATION_COUNT_PER_STAGE = 1;          // 1ステージごとに増える高速編隊の数
@@ -704,7 +709,7 @@ upgradeButtons: {
     let critLevel = 0;
     let hpUpgradesCount = 0;
 // ===== WEAPON SYSTEM =====
-const MAX_WEAPONS = 3;
+const MAX_WEAPONS = 5;
 const WEAPON_OFFER_CHANCE = 0.40;
 
 const ownedWeapons = [];
@@ -833,9 +838,17 @@ function cycleDroneMode() {
 }
 
 // MACHINEGUN tuning
-const MG_SPREAD = 0.6;       // 発射角のばらつき(ラジアン、±)
+const MG_SPREAD = 0.8;       // 発射角のばらつき(ラジアン、±)
 const MG_LIFE = 34;          // 弾の寿命(フレーム)= 射程
 const MG_DAMAGE_MULT = 0.4;
+const MG_BURST_FRAMES = 150;  // 連射できる時間(約1.25秒)
+const MG_REST_FRAMES = 90;   // 連射後のクールダウン(約1.5秒。冷却短縮パッシブが効く)
+let mgBurst = MG_BURST_FRAMES;
+let mgRest = 0;
+function mgRestFrames() {
+    const cut = Math.min(0.6, passiveLevels.cooldown * PASSIVE_COOLDOWN_CUT_PER_LV);
+    return Math.max(1, Math.round(MG_REST_FRAMES * (1 - cut)));
+}
 
 const weaponTimers = {
     drill: 0,
@@ -1693,6 +1706,27 @@ const ELECTRO_CHAIN_RANGE = 120;
                 this.rotAngle = 0;
                 this.rotSpeed = (Math.random() - 0.5) * 0.08;
                 this.shootTimer = 999999;
+            } else if (type === 6) {
+                // ミサイル艦：ゆっくり降下しながら、自機を追うミサイルを撃つ。
+                this.width = 34;
+                this.height = 30;
+                this.hp = 4 + bossLevel * 2 * ENEMY_LEVEL_SCALE;
+                this.speedX = (Math.random() - 0.5) * 0.8;
+                this.speedY = 0.9 + Math.random() * 0.4;
+                this.color = '#dc2626';
+                this.shootTimer = 70 + Math.floor(Math.random() * 60);
+            } else if (type === 7) {
+                // ミサイル：旋回に制限がある追尾弾。撃ち落とせる。
+                this.width = 12;
+                this.height = 12;
+                this.hp = 1 + Math.floor(bossLevel * 0.4 * ENEMY_LEVEL_SCALE);
+                this.speedX = 0;
+                this.speedY = 0;
+                this.color = '#f87171';
+                this.heading = Math.PI / 2;
+                this.rotAngle = this.heading;
+                this.age = 0;
+                this.shootTimer = 999999;
             } else if (type === 4) {
                 // 分裂隕石：大型で硬い。倒すと小さな破片(type 5)が2つに分かれて飛ぶ。
                 this.width = 46;
@@ -1740,6 +1774,26 @@ const ELECTRO_CHAIN_RANGE = 120;
         }
 
         update() {
+            if (this.type === 7) {
+                this.age++;
+                const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
+                const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+                let diff = Math.atan2(dy, dx) - this.heading;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                this.heading += Math.max(-MISSILE_TURN_RATE, Math.min(MISSILE_TURN_RATE, diff));
+                this.x += Math.cos(this.heading) * MISSILE_SPEED;
+                this.y += Math.sin(this.heading) * MISSILE_SPEED;
+                this.rotAngle = this.heading;
+                if (this.age > MISSILE_LIFE_FRAMES) {
+                    this.active = false;
+                    createExplosion(this.x + this.width / 2, this.y + this.height / 2, this.color, 8);
+                } else if (this.x < -50 || this.x > GAME_WIDTH + 50 || this.y < -50 || this.y > GAME_HEIGHT + 50) {
+                    this.active = false;
+                }
+                return;
+            }
+
             if (this.type === 3) {
                 if (this.formationMoveType === 0) {
                     // ① 公転型：仮想中心の周りを小さく旋回しながら前進。
@@ -1798,6 +1852,19 @@ const ELECTRO_CHAIN_RANGE = 120;
             if (this.type === 2 || this.type === 4 || this.type === 5) this.rotAngle += this.rotSpeed;
             if (this.x <= 0 || this.x >= GAME_WIDTH - this.width) this.speedX *= -1;
             if (this.y > GAME_HEIGHT + 35) this.active = false;
+
+            if (this.type === 6) {
+                this.shootTimer--;
+                if (this.shootTimer <= 0) {
+                    this.shootTimer = 170 + Math.random() * 60;
+                    if (this.y > 0 && this.y < GAME_HEIGHT - 220) {
+                        const msl = new Enemy(7);
+                        msl.x = this.x + this.width / 2 - msl.width / 2;
+                        msl.y = this.y + this.height;
+                        enemies.push(msl);
+                    }
+                }
+            }
 
             if (this.type === 0 || this.type === 1) {
                 this.shootTimer--;
@@ -1860,6 +1927,43 @@ const ELECTRO_CHAIN_RANGE = 120;
                 ctx.lineTo(0, 16);
                 ctx.lineTo(-14, 10);
                 ctx.lineTo(-16, -6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else if (this.type === 6) {
+                // ミサイル艦：赤い船体と、左右のミサイルポッド
+                ctx.fillStyle = '#7f1d1d';
+                ctx.strokeStyle = '#f87171';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, 15);
+                ctx.lineTo(17, -4);
+                ctx.lineTo(10, -15);
+                ctx.lineTo(-10, -15);
+                ctx.lineTo(-17, -4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#fca5a5';
+                ctx.fillRect(-14, -2, 5, 10);
+                ctx.fillRect(9, -2, 5, 10);
+            } else if (this.type === 7) {
+                // ミサイル：進行方向を向いた小型弾体と炎
+                ctx.rotate(this.rotAngle);
+                ctx.fillStyle = '#fb923c';
+                ctx.beginPath();
+                ctx.moveTo(-6, 0);
+                ctx.lineTo(-13 - Math.random() * 3, -3);
+                ctx.lineTo(-13 - Math.random() * 3, 3);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = '#fee2e2';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(8, 0);
+                ctx.lineTo(-6, -4);
+                ctx.lineTo(-6, 4);
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
@@ -2864,6 +2968,8 @@ function startGame() {
     orbitAngle = 0;
     droneMode = 0;
     weaponTimers.machinegun = weaponTimers.drone = 0;
+    mgBurst = MG_BURST_FRAMES;
+    mgRest = 0;
     updateDroneButton();
 
     [playerBulletPool, enemyBulletPool, particlePool, damageTextPool].forEach(pool => {
@@ -3635,20 +3741,30 @@ function startGame() {
             }
         }
 
-        // MACHINEGUN: 機体の両側から、広くばらけた小弾を高速連射。
+        // MACHINEGUN: 機体の両側から、広くばらけた小弾を連射。一定時間撃つと止まり、クールダウンを挟む。
         if (hasWeapon('machinegun')) {
-            if (weaponTimers.machinegun > 0) {
-                weaponTimers.machinegun--;
+            if (mgRest > 0) {
+                mgRest--;
+                if (mgRest === 0) mgBurst = MG_BURST_FRAMES;
             } else {
-                for (const sx of [player.x + 4, player.x + player.width - 4]) {
-                    const a = (Math.random() * 2 - 1) * MG_SPREAD;
-                    const sp = 10 + Math.random() * 2;
-                    spawnFromPool(playerBulletPool, b => {
-                        b.spawn(sx, player.y + 8, Math.sin(a) * sp, -Math.cos(a) * sp, '#fde68a', 2, false, 0, 'normal', MG_LIFE, 4, 4, 1, 1);
-                        b.dmgMult = MG_DAMAGE_MULT;
-                    });
+                if (weaponTimers.machinegun > 0) {
+                    weaponTimers.machinegun--;
+                } else {
+                    for (const sx of [player.x + 4, player.x + player.width - 4]) {
+                        const a = (Math.random() * 2 - 1) * MG_SPREAD;
+                        const sp = 10 + Math.random() * 2;
+                        spawnFromPool(playerBulletPool, b => {
+                            b.spawn(sx, player.y + 8, Math.sin(a) * sp, -Math.cos(a) * sp, '#fde68a', 2, false, 0, 'normal', MG_LIFE, 4, 4, 1, 1);
+                            b.dmgMult = MG_DAMAGE_MULT;
+                        });
+                    }
+                    weaponTimers.machinegun = weaponCooldown('machinegun');
                 }
-                weaponTimers.machinegun = weaponCooldown('machinegun');
+                mgBurst--;
+                if (mgBurst <= 0) {
+                    mgRest = mgRestFrames();
+                    weaponTimers.machinegun = 0;
+                }
             }
         }
 
@@ -3801,7 +3917,8 @@ function startGame() {
                 enemySpawnTimer = 0;
                 const rand = Math.random();
                 // 0=通常 2=隕石 4=分裂隕石 1=重装
-                const type = rand < 0.40 ? 0 : (rand < 0.65 ? 2 : (rand < 0.77 ? 4 : 1));
+                let type = rand < 0.40 ? 0 : (rand < 0.65 ? 2 : (rand < 0.77 ? 4 : 1));
+                if (type === 0 && bossLevel >= 1 && Math.random() < MISSILE_SHIP_REPLACE_CHANCE) type = 6;
                 enemies.push(new Enemy(type));
             }
 
@@ -3974,6 +4091,21 @@ function startGame() {
                 ctx.stroke();
                 ctx.restore();
             }
+        }
+
+        // MACHINEGUN ゲージ: 連射中は残り、クールダウン中は回復の進み具合
+        if (gameState === STATE_PLAYING && hasWeapon('machinegun')) {
+            const resting = mgRest > 0;
+            const k = resting ? 1 - mgRest / mgRestFrames() : mgBurst / MG_BURST_FRAMES;
+            ctx.save();
+            ctx.fillStyle = 'rgba(15,23,42,0.7)';
+            ctx.fillRect(8, GAME_HEIGHT - 30, 60, 5);
+            ctx.fillStyle = resting ? '#f87171' : '#fde68a';
+            ctx.fillRect(8, GAME_HEIGHT - 30, 60 * Math.max(0, Math.min(1, k)), 5);
+            ctx.font = '9px monospace';
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillText(resting ? 'MG COOLING' : 'MG', 72, GAME_HEIGHT - 25);
+            ctx.restore();
         }
 
         // DRONE visual + 現在の追従方法ラベル
