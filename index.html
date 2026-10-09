@@ -6,7 +6,7 @@
     <title>RETRO SPACE SHOOTER - 無料ブラウザシューティングゲーム</title>
     <meta name="description"
           content="無料で遊べるレトロ風ブラウザシューティングゲーム。高速編隊や60秒ごとに登場するボスを撃破してハイスコアを目指そう！">
-    <!-- RETRO SPACE SHOOTER VERSION: v1.5.17 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.5.22 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -106,7 +106,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.5.17</div>
+        <div class="version-badge" aria-label="Game version">v1.5.22</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -620,7 +620,35 @@ upgradeButtons: {
     const KILL_CRIT_BONUS = 0.25;                // 撃破後の会心率アップ量
     const KILL_CRIT_DURATION_MS = 8000;          // 1スタックの持続時間
     const KILL_CRIT_MAX_STACKS = 4;              // 重複できる数(撃破ごとに1スタック)
-    const LOW_HP_POWER_MAX = 0.6;                // HP残りわずかのとき最大で攻撃力+60%
+    const LOW_HP_POWER_MAX = 1.2;                // HP残りわずかのとき最大で攻撃力+120%
+    const HIGH_HP_POWER_MAX = 0.6;               // HP満タンのとき最大で攻撃力+60%
+    // 加速の力: 自機の移動速度に応じて攻撃力UP。速く動くほど上がり、少しの間は保持し、止まっていると下がる。
+    const MOMENTUM_POWER_MAX = 0.6;              // 最高速で動き続けたとき攻撃力+60%
+    const MOMENTUM_REF_SPEED = 5.5;              // この速さ(px/フレーム)で最大(通常の移動速度)
+    const MOMENTUM_RISE = 0.25;                  // 速くなったときの上がりやすさ(1フレームあたりの追従率)
+    const MOMENTUM_HOLD_FRAMES = 30;             // 最高値に近い速さを保てなくなってから、効果を保持するフレーム数(約0.5秒)
+    const MOMENTUM_DECAY = 0.02;                 // 保持が切れたあと、1フレームあたりに下がる量(最大から約0.8秒で0)
+    let momentumValue = 0;                       // 現在の強さ(0〜1)
+    let momentumHold = 0;
+    let momentumPrevX = null;
+    let momentumPrevY = null;
+    function updateMomentum() {
+        if (passiveLevels.momentum <= 0) { momentumValue = 0; momentumHold = 0; momentumPrevX = null; return; }
+        const speed = momentumPrevX === null ? 0 : Math.hypot(player.x - momentumPrevX, player.y - momentumPrevY);
+        momentumPrevX = player.x;
+        momentumPrevY = player.y;
+        const ratio = Math.min(1, speed / MOMENTUM_REF_SPEED);
+        if (ratio > momentumValue) {
+            momentumValue += (ratio - momentumValue) * MOMENTUM_RISE;
+            momentumHold = MOMENTUM_HOLD_FRAMES;
+        } else if (ratio >= momentumValue * 0.85) {
+            momentumHold = MOMENTUM_HOLD_FRAMES;          // 最高値に近い速さを保っている間は保持し続ける
+        } else if (momentumHold > 0) {
+            momentumHold--;
+        } else {
+            momentumValue = Math.max(ratio, momentumValue - MOMENTUM_DECAY);   // 今の速さまで下がる(止まっていれば0へ)
+        }
+    }
     const SHIELD_INTERVAL_MS = 30000;            // シールド再取得までの時間
     // ガラスの大砲: HPが常に1に固定される代わりに全武器の攻撃力UP
     const GLASS_CANNON_POWER_MULT = 1.8;
@@ -635,7 +663,7 @@ upgradeButtons: {
     // 撃破爆発: 敵を倒すと爆発。爆発で倒した敵は再爆発しない(連鎖防止)
     const BLAST_RADIUS = 80;
     const BLAST_DAMAGE_MULT = 2;
-    const passiveLevels = { cooldown: 0, killCrit: 0, lowHpPower: 0, bossHeal: 0, shield: 0, glassCannon: 0, splitShot: 0, blast: 0 };
+    const passiveLevels = { cooldown: 0, killCrit: 0, lowHpPower: 0, highHpPower: 0, momentum: 0, bossHeal: 0, shield: 0, glassCannon: 0, splitShot: 0, blast: 0 };
     const PASSIVE_DEFS = {
         cooldown: {
             icon: '⏱️', title: '武器クールダウン短縮', maxLevel: 3,
@@ -656,6 +684,14 @@ upgradeButtons: {
         shield: {
             icon: '🛡️', title: 'エネルギーシールド', maxLevel: 1,
             desc: () => `${SHIELD_INTERVAL_MS / 1000}秒ごとにシールド獲得(1回の被弾を防ぐ)`
+        },
+        highHpPower: {
+            icon: '💪', title: '満タンの力', maxLevel: 1,
+            desc: () => `HPが多いほど攻撃力UP(満タンで最大+${Math.round(HIGH_HP_POWER_MAX * 100)}%)`
+        },
+        momentum: {
+            icon: '💨', title: '加速の力', maxLevel: 1,
+            desc: () => `速く動くほど攻撃力UP(最大+${Math.round(MOMENTUM_POWER_MAX * 100)}%)。少しの間は保持し、止まっていると下がる`
         },
         glassCannon: {
             icon: '💎', title: 'ガラスの大砲', maxLevel: 1,
@@ -681,13 +717,13 @@ upgradeButtons: {
     function getCritChanceBonus() {
         return killCritTimers.length * KILL_CRIT_BONUS;
     }
-    // 全武器共通の攻撃力補正: 背水の陣(HPが減るほど増える) × ガラスの大砲
+    // 全武器共通の攻撃力補正: (背水の陣 + 満タンの力 + 加速の力) × ガラスの大砲
     function getLowHpPowerMultiplier() {
         let mult = 1;
-        if (passiveLevels.lowHpPower > 0) {
-            const ratio = Math.max(0, player.lives) / Math.max(1, player.maxLives);
-            mult += LOW_HP_POWER_MAX * (1 - ratio);
-        }
+        const hpRatio = Math.max(0, player.lives) / Math.max(1, player.maxLives);
+        if (passiveLevels.lowHpPower > 0) mult += LOW_HP_POWER_MAX * (1 - hpRatio);   // 背水の陣
+        if (passiveLevels.highHpPower > 0) mult += HIGH_HP_POWER_MAX * hpRatio;       // 満タンの力
+        if (passiveLevels.momentum > 0) mult += MOMENTUM_POWER_MAX * momentumValue;   // 加速の力
         if (passiveLevels.glassCannon > 0) mult *= GLASS_CANNON_POWER_MULT;
         return mult;
     }
@@ -844,7 +880,11 @@ const DRONE_COLORS = ['#c084fc', '#4ade80', '#fb923c'];
 const DRONE_DAMAGE_MULT = 0.8;
 const ORBIT_RADIUS = 46;
 const ORBIT_SPEED = 0.07;
-const TRAIL_GAP_FRAMES = 12;
+// TRAIL: 自機が通った道のりに沿って、自機から一定の距離(道のり)だけ後ろに並ぶ。
+// 自機が止まっても、ドローンは自機に重ならず、その距離を保って待つ。
+const TRAIL_DRONE_DISTANCE = 40;   // 自機と1機目、1機目と2機目…の間隔(px、通った道のりで測る)
+const TRAIL_SAMPLE_DIST = 4;       // 軌跡を記録する間隔(px)
+const TRAIL_BOTTOM_MARGIN = 14;    // 開始時の軌跡が画面下端からはみ出さないための余白
 const WING_OFFSETS = [
     [{ dx: 44, dy: 8 }],
     [{ dx: -44, dy: 8 }, { dx: 44, dy: 8 }],
@@ -853,6 +893,61 @@ const WING_OFFSETS = [
 const dronePos = [];
 const playerPath = [];
 let orbitAngle = 0;
+
+// 軌跡(playerPath: 古い順)を更新する。動いた距離がTRAIL_SAMPLE_DISTを超えたときだけ記録するので、止まっている間は変化しない。
+function updateTrailPath(pcx, pcy) {
+    const keep = TRAIL_DRONE_DISTANCE * 3 + 40;
+    if (playerPath.length === 0) {
+        // 開始時・ドローン取得時: 自機の後ろ(下)へ伸びる軌跡を仮に作る。下端に着いたら横へ折れる。
+        const dirX = pcx < GAME_WIDTH / 2 ? 1 : -1;
+        let x = pcx;
+        let y = pcy;
+        const seed = [{ x, y }];
+        for (let k = 0; k < keep / TRAIL_SAMPLE_DIST; k++) {
+            if (y + TRAIL_SAMPLE_DIST <= GAME_HEIGHT - TRAIL_BOTTOM_MARGIN) y += TRAIL_SAMPLE_DIST;
+            else x = Math.max(10, Math.min(GAME_WIDTH - 10, x + dirX * TRAIL_SAMPLE_DIST));
+            seed.push({ x, y });
+        }
+        for (let k = seed.length - 1; k >= 0; k--) playerPath.push(seed[k]);
+    }
+    const last = playerPath[playerPath.length - 1];
+    if (Math.hypot(pcx - last.x, pcy - last.y) >= TRAIL_SAMPLE_DIST) playerPath.push({ x: pcx, y: pcy });
+
+    // 古い部分を捨てる(自機から keep の道のりより先は不要)
+    let total = 0;
+    for (let i = playerPath.length - 1; i > 0; i--) {
+        total += Math.hypot(playerPath[i].x - playerPath[i - 1].x, playerPath[i].y - playerPath[i - 1].y);
+        if (total > keep) { playerPath.splice(0, i - 1); break; }
+    }
+}
+
+// 自機の現在位置から、軌跡を逆にたどって TRAIL_DRONE_DISTANCE ごとに n 機分の位置を求める。
+function trailDronePositions(pcx, pcy, n) {
+    const out = [];
+    let ax = pcx;
+    let ay = pcy;
+    let remaining = TRAIL_DRONE_DISTANCE;
+    let idx = playerPath.length - 1;
+    while (out.length < n) {
+        if (idx < 0) { out.push({ x: ax, y: ay }); continue; }   // 軌跡が足りないときは、いちばん古い位置に待機
+        const bx = playerPath[idx].x;
+        const by = playerPath[idx].y;
+        const seg = Math.hypot(bx - ax, by - ay);
+        if (seg > 0 && seg >= remaining) {
+            const t = remaining / seg;
+            ax += (bx - ax) * t;
+            ay += (by - ay) * t;
+            out.push({ x: ax, y: ay });
+            remaining = TRAIL_DRONE_DISTANCE;
+        } else {
+            remaining -= seg;
+            ax = bx;
+            ay = by;
+            idx--;
+        }
+    }
+    return out;
+}
 let droneMode = 0;
 
 function updateDroneButton() {
@@ -935,6 +1030,11 @@ const laserBeams = [];
 // SNIPER_FLASH_FRAMES: 発射後に射線が残るフレーム数。
 // 冷却時間は WEAPON_DEFS.sniper.cooldown。
 const SNIPER_AIM_FRAMES = 60;
+// 狙いを定める時間にも、武器クールダウン短縮パッシブを効かせる(冷却時間と同じ短縮率)
+function sniperAimFrames() {
+    const cut = Math.min(0.6, passiveLevels.cooldown * PASSIVE_COOLDOWN_CUT_PER_LV);
+    return Math.max(1, Math.round(SNIPER_AIM_FRAMES * (1 - cut)));
+}
 const SNIPER_DAMAGE_MULT = 8;
 const SNIPER_FLASH_FRAMES = 14;
 const SNIPER_RANGE = 1400;
@@ -1039,6 +1139,7 @@ const ELECTRO_CHAIN_RANGE = 120;
     let touchX = null;
     let touchY = null;
     let isTouching = false;
+    let moveTouchId = null;   // 自機を動かしている指の識別番号(FIREボタンの指とは別に追う)
 
     // ---------------------------------------------------------------
     // 04. World data / object pools
@@ -3004,6 +3105,9 @@ function startGame() {
     mgBurst = MG_BURST_FRAMES;
     mgRest = 0;
     blastRings.length = 0;
+    momentumValue = 0;
+    momentumHold = 0;
+    momentumPrevX = null;
     updateDroneButton();
 
     [playerBulletPool, enemyBulletPool, particlePool, damageTextPool].forEach(pool => {
@@ -3077,6 +3181,7 @@ function startGame() {
         gameState = STATE_TITLE;
         ui.pauseButton.textContent = 'PAUSE';
         isTouching = false;
+        moveTouchId = null;
         isFiringTouch = false;
         touchX = null;
         touchY = null;
@@ -3772,7 +3877,7 @@ function startGame() {
                     sniperState.aimTimer = 0;
                 } else {
                     sniperState.aimTimer++;
-                    if (sniperState.aimTimer >= SNIPER_AIM_FRAMES) {
+                    if (sniperState.aimTimer >= sniperAimFrames()) {
                         const sx = player.x + player.width * 0.5;
                         const sy = player.y + 4;
                         const tp = sniperTargetPos();
@@ -3877,19 +3982,17 @@ function startGame() {
         if (hasWeapon('drone')) {
             const pcx = player.x + player.width * 0.5;
             const pcy = player.y + player.height * 0.5;
-            playerPath.push({ x: pcx, y: pcy });
-            if (playerPath.length > TRAIL_GAP_FRAMES * 4 + 2) playerPath.shift();
+            updateTrailPath(pcx, pcy);
             orbitAngle += ORBIT_SPEED;
             const n = weaponLevels.drone || 1;
+            const trailPos = droneMode === 1 ? trailDronePositions(pcx, pcy, n) : null;
 
             for (let i = 0; i < n; i++) {
                 if (droneMode === 0) {
                     const a = orbitAngle + (i / n) * Math.PI * 2;
                     dronePos.push({ x: pcx + Math.cos(a) * ORBIT_RADIUS, y: pcy + Math.sin(a) * ORBIT_RADIUS });
                 } else if (droneMode === 1) {
-                    const idx = Math.max(0, playerPath.length - 1 - (i + 1) * TRAIL_GAP_FRAMES);
-                    const q = playerPath[idx] || { x: pcx, y: pcy };
-                    dronePos.push({ x: q.x, y: q.y });
+                    dronePos.push({ x: trailPos[i].x, y: trailPos[i].y });
                 } else {
                     const o = WING_OFFSETS[n - 1][i];
                     dronePos.push({ x: pcx + o.dx, y: pcy + o.dy });
@@ -4014,6 +4117,7 @@ function startGame() {
 
         player.update();
         if (passiveLevels.glassCannon > 0 && player.lives > 1) player.lives = 1;
+        updateMomentum();
       　updateWeapons();
 
         if (!isBossActive && !boss) {
@@ -4146,7 +4250,7 @@ function startGame() {
                 const sx = player.x + player.width * 0.5;
                 const sy = player.y + 4;
                 const tp = sniperTargetPos();
-                const k = Math.min(1, sniperState.aimTimer / SNIPER_AIM_FRAMES);
+                const k = Math.min(1, sniperState.aimTimer / sniperAimFrames());
 
                 ctx.save();
                 ctx.strokeStyle = `rgba(250,204,21,${(0.25 + 0.55 * k)})`;
@@ -4198,6 +4302,19 @@ function startGame() {
                 ctx.stroke();
                 ctx.restore();
             }
+        }
+
+        // 加速の力ゲージ
+        if (gameState === STATE_PLAYING && passiveLevels.momentum > 0) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(15,23,42,0.7)';
+            ctx.fillRect(8, GAME_HEIGHT - 42, 60, 5);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillRect(8, GAME_HEIGHT - 42, 60 * Math.max(0, Math.min(1, momentumValue)), 5);
+            ctx.font = '9px monospace';
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillText(`SPEED +${Math.round(MOMENTUM_POWER_MAX * momentumValue * 100)}%`, 72, GAME_HEIGHT - 37);
+            ctx.restore();
         }
 
         // MACHINEGUN ゲージ: 連射中は残り、クールダウン中は回復の進み具合
@@ -4314,34 +4431,54 @@ function startGame() {
         sy = GAME_HEIGHT / canvasRect.height;
     }, { passive: true });
 
-    function updateTouchPos(e) {
-        if (!e.touches || e.touches.length === 0) return;
-        const clientX = e.touches[0].clientX;
-        const clientY = e.touches[0].clientY;
-        touchX = (clientX - canvasRect.left) * sx;
-        touchY = (clientY - canvasRect.top) * sy;
+    // 自機の移動に使う指は、「操作ボタン・メニュー以外で触れ始めた指」を識別番号で追う。
+    // (touches[0] を使うと、FIREボタンを先に押している場合にFIREの指の位置へ自機が向かってしまう)
+    const isControlTarget = (target) => !!(target && target.closest && (
+        target.closest('#touch-controls') || target.closest('#screen-upgrade') || target.closest('#screen-select-ship')
+    ));
+
+    function setTouchPos(touch) {
+        touchX = (touch.clientX - canvasRect.left) * sx;
+        touchY = (touch.clientY - canvasRect.top) * sy;
+    }
+
+    function findTouch(list, id) {
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].identifier === id) return list[i];
+        }
+        return null;
     }
 
     container.addEventListener('touchstart', e => {
         if (gameState !== STATE_PLAYING) return;
-        if (e.target.closest('#touch-controls') || e.target.closest('#screen-upgrade') || e.target.closest('#screen-select-ship')) return;
-        isTouching = true;
-        updateTouchPos(e);
+        if (moveTouchId !== null) return;   // すでに移動の指がある間は、ほかの指を無視
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            if (isControlTarget(t.target)) continue;
+            moveTouchId = t.identifier;
+            isTouching = true;
+            setTouchPos(t);
+            break;
+        }
     }, { passive: true });
 
     container.addEventListener('touchmove', e => {
-        if (!isTouching) return;
-        if (e.target.closest('#touch-controls') || e.target.closest('#screen-upgrade') || e.target.closest('#screen-select-ship')) return;
-        updateTouchPos(e);
+        if (!isTouching || moveTouchId === null) return;
+        const t = findTouch(e.touches, moveTouchId);
+        if (t) setTouchPos(t);
     }, { passive: true });
 
-    container.addEventListener('touchend', e => {
-        if (!e.touches || e.touches.length === 0) {
+    const endMoveTouch = e => {
+        if (moveTouchId === null) return;
+        if (findTouch(e.changedTouches, moveTouchId)) {
+            moveTouchId = null;
             isTouching = false;
             touchX = null;
             touchY = null;
         }
-    }, { passive: true });
+    };
+    container.addEventListener('touchend', endMoveTouch, { passive: true });
+    container.addEventListener('touchcancel', endMoveTouch, { passive: true });
 
     ui.touchFireButton.addEventListener('touchstart', (e) => {
         e.preventDefault();
