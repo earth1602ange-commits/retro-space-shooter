@@ -6,7 +6,7 @@
     <title>RETRO SPACE SHOOTER - 無料ブラウザシューティングゲーム</title>
     <meta name="description"
           content="無料で遊べるレトロ風ブラウザシューティングゲーム。高速編隊や60秒ごとに登場するボスを撃破してハイスコアを目指そう！">
-    <!-- RETRO SPACE SHOOTER VERSION: v1.5.14 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.5.17 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -106,7 +106,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.5.14</div>
+        <div class="version-badge" aria-label="Game version">v1.5.17</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -622,7 +622,20 @@ upgradeButtons: {
     const KILL_CRIT_MAX_STACKS = 4;              // 重複できる数(撃破ごとに1スタック)
     const LOW_HP_POWER_MAX = 0.6;                // HP残りわずかのとき最大で攻撃力+60%
     const SHIELD_INTERVAL_MS = 30000;            // シールド再取得までの時間
-    const passiveLevels = { cooldown: 0, killCrit: 0, lowHpPower: 0, bossHeal: 0, shield: 0 };
+    // ガラスの大砲: HPが常に1に固定される代わりに全武器の攻撃力UP
+    const GLASS_CANNON_POWER_MULT = 1.8;
+    // 分裂弾: 敵に当たると、威力×SPLIT_DMG_MULTの弾がSPLIT_COUNT発、ランダムな方向へ飛ぶ(命中した敵は避ける)
+    const SPLIT_COUNT = 2;
+    const SPLIT_DMG_MULT = 0.5;
+    const SPLIT_SPEED = 8;
+    const SPLIT_LIFE = 26;
+    // 分裂弾は、プールの空きが PLAYER_BULLET_RESERVE 個を切ったら出さない(主砲・各武器の弾を優先する)
+    const PLAYER_BULLET_RESERVE = 100;
+    let splitBudget = 0;   // そのフレームに分裂弾として出せる残り数(updateで計算)
+    // 撃破爆発: 敵を倒すと爆発。爆発で倒した敵は再爆発しない(連鎖防止)
+    const BLAST_RADIUS = 80;
+    const BLAST_DAMAGE_MULT = 2;
+    const passiveLevels = { cooldown: 0, killCrit: 0, lowHpPower: 0, bossHeal: 0, shield: 0, glassCannon: 0, splitShot: 0, blast: 0 };
     const PASSIVE_DEFS = {
         cooldown: {
             icon: '⏱️', title: '武器クールダウン短縮', maxLevel: 3,
@@ -643,6 +656,18 @@ upgradeButtons: {
         shield: {
             icon: '🛡️', title: 'エネルギーシールド', maxLevel: 1,
             desc: () => `${SHIELD_INTERVAL_MS / 1000}秒ごとにシールド獲得(1回の被弾を防ぐ)`
+        },
+        glassCannon: {
+            icon: '💎', title: 'ガラスの大砲', maxLevel: 1,
+            desc: () => `HPが常に1に固定(回復も無効)。代わりに攻撃力+${Math.round((GLASS_CANNON_POWER_MULT - 1) * 100)}%`
+        },
+        splitShot: {
+            icon: '🔀', title: '分裂弾', maxLevel: 1,
+            desc: () => `弾が敵に当たると、威力${Math.round(SPLIT_DMG_MULT * 100)}%の弾が${SPLIT_COUNT}発、ランダムな方向へ飛ぶ`
+        },
+        blast: {
+            icon: '💣', title: '撃破爆発', maxLevel: 1,
+            desc: () => `敵を倒すと爆発し、周囲の敵に攻撃力${BLAST_DAMAGE_MULT}倍のダメージ`
         }
     };
     const killCritTimers = [];   // 各スタックの残り時間(ms)
@@ -656,10 +681,15 @@ upgradeButtons: {
     function getCritChanceBonus() {
         return killCritTimers.length * KILL_CRIT_BONUS;
     }
+    // 全武器共通の攻撃力補正: 背水の陣(HPが減るほど増える) × ガラスの大砲
     function getLowHpPowerMultiplier() {
-        if (passiveLevels.lowHpPower <= 0) return 1;
-        const ratio = Math.max(0, player.lives) / Math.max(1, player.maxLives);
-        return 1 + LOW_HP_POWER_MAX * (1 - ratio);
+        let mult = 1;
+        if (passiveLevels.lowHpPower > 0) {
+            const ratio = Math.max(0, player.lives) / Math.max(1, player.maxLives);
+            mult += LOW_HP_POWER_MAX * (1 - ratio);
+        }
+        if (passiveLevels.glassCannon > 0) mult *= GLASS_CANNON_POWER_MULT;
+        return mult;
     }
     // 会心倍率(1段あたり)。会心率が100%を超えると、確定分の段数ぶん重ねてかかる。
     // CRIT_MULT_NORMAL: 通常弾 / CRIT_MULT_SPECIAL: 強化弾(TYPE-3中央弾) / CRIT_MULT_SNIPER: SNIPER
@@ -841,7 +871,7 @@ function cycleDroneMode() {
 const MG_SPREAD = 0.8;       // 発射角のばらつき(ラジアン、±)
 const MG_LIFE = 34;          // 弾の寿命(フレーム)= 射程
 const MG_DAMAGE_MULT = 0.4;
-const MG_BURST_FRAMES = 150;  // 連射できる時間(約1.25秒)
+const MG_BURST_FRAMES = 150;  // 連射できる時間(約2.5秒)
 const MG_REST_FRAMES = 90;   // 連射後のクールダウン(約1.5秒。冷却短縮パッシブが効く)
 let mgBurst = MG_BURST_FRAMES;
 let mgRest = 0;
@@ -905,7 +935,7 @@ const laserBeams = [];
 // SNIPER_FLASH_FRAMES: 発射後に射線が残るフレーム数。
 // 冷却時間は WEAPON_DEFS.sniper.cooldown。
 const SNIPER_AIM_FRAMES = 60;
-const SNIPER_DAMAGE_MULT = 12;
+const SNIPER_DAMAGE_MULT = 8;
 const SNIPER_FLASH_FRAMES = 14;
 const SNIPER_RANGE = 1400;
 const SNIPER_HALF_WIDTH = 4;
@@ -1050,6 +1080,8 @@ const ELECTRO_CHAIN_RANGE = 120;
             this.critChanceMultiplier = critChanceMultiplier;
             this.critDamageMultiplier = critDamageMultiplier;
             this.dmgMult = 1;
+            this.noSplit = false;
+            this.ignoreTarget = null;
             this.canGuard = false;
             this.splitWeapon = false;
             this.homingFast = false;
@@ -1331,7 +1363,7 @@ const ELECTRO_CHAIN_RANGE = 120;
         return pool;
     }
 
-    const playerBulletPool = createPool(Bullet, 180);
+    const playerBulletPool = createPool(Bullet, 300);
     const enemyBulletPool = createPool(Bullet, 300);
     const particlePool = createPool(Particle, 350);
     const damageTextPool = createPool(DamageText, 120);
@@ -2849,6 +2881,7 @@ function selectUpgradeSlot(slotIndex) {
         const id = type.substring(8);
         if (PASSIVE_DEFS[id] && passiveLevels[id] < PASSIVE_DEFS[id].maxLevel) {
             passiveLevels[id]++;
+            if (id === 'glassCannon') player.lives = 1;
             if (id === 'shield') {
                 shieldTimerMs = 0;
                 player.shield = true;   // 取得した瞬間から1枚持った状態にする
@@ -2970,6 +3003,7 @@ function startGame() {
     weaponTimers.machinegun = weaponTimers.drone = 0;
     mgBurst = MG_BURST_FRAMES;
     mgRest = 0;
+    blastRings.length = 0;
     updateDroneButton();
 
     [playerBulletPool, enemyBulletPool, particlePool, damageTextPool].forEach(pool => {
@@ -3164,6 +3198,7 @@ function startGame() {
                 if (!enemy.active) continue;
 
                 if (isPierce && bullet.hitSet.has(enemy)) continue;
+                if (bullet.ignoreTarget === enemy) continue;
 
                 if (bulletRight > enemy.x && bulletLeft < enemy.x + enemy.width &&
                     bulletBottom > enemy.y && bulletTop < enemy.y + enemy.height) {
@@ -3179,6 +3214,7 @@ function startGame() {
                     const dmgColor = critRoll.tiers >= 2 ? '#ff9900' : (isCrit ? '#ff0055' : '#ffff00');
 
                     enemy.hp -= damage;
+                    splitBulletOnHit(bullet, enemy);
                     
                     createDamageText(bullet.x, bullet.y, Math.max(1, Math.round(damage)), dmgColor, isCrit);
                     createExplosion(bullet.x, bullet.y, bullet.color, 3);
@@ -3218,6 +3254,7 @@ function startGame() {
                         const dmgColor = critRoll.tiers >= 2 ? '#ff9900' : (isCrit ? '#ff0055' : '#ffff00');
 
                         part.hp -= damage;
+                        splitBulletOnHit(bullet, part);
 
                         createDamageText(bullet.x, bullet.y, Math.max(1, Math.round(damage)), dmgColor, isCrit);
                         createExplosion(bullet.x, bullet.y, part.color, 3);
@@ -3283,6 +3320,69 @@ function startGame() {
         }
     }
 
+    // 分裂弾: 命中した弾の位置から、ランダムな方向へ弱い弾を飛ばす。分裂弾自身は分裂しない。
+    function splitBulletOnHit(bullet, target) {
+        if (passiveLevels.splitShot <= 0 || bullet.noSplit) return;
+        if (bullet.type === 'drill' || bullet.type === 'blade') return;   // 貫通弾は対象外
+        if (splitBudget < SPLIT_COUNT) return;                            // 空きが少ないときは出さない
+        splitBudget -= SPLIT_COUNT;
+        const x = bullet.x, y = bullet.y, dm = (bullet.dmgMult || 1) * SPLIT_DMG_MULT;
+        for (let i = 0; i < SPLIT_COUNT; i++) {
+            const a = Math.random() * Math.PI * 2;
+            spawnFromPool(playerBulletPool, b => {
+                b.spawn(x, y, Math.cos(a) * SPLIT_SPEED, Math.sin(a) * SPLIT_SPEED, '#fef08a', 2, false, 0, 'normal', SPLIT_LIFE, 4, 4, 1, 1);
+                b.dmgMult = dm;
+                b.noSplit = true;
+                b.ignoreTarget = target;
+            });
+        }
+    }
+
+    // 撃破爆発: (cx, cy) を中心に、範囲内の敵とボスのパーツへダメージ。
+    const blastRings = [];
+    function applyBlastDamage(cx, cy) {
+        blastRings.push({ x: cx, y: cy, life: 14 });
+        createExplosion(cx, cy, '#fb923c', 20);
+        const dmg = Math.max(1, Math.round(shotPowerLevel * BLAST_DAMAGE_MULT * getLowHpPowerMultiplier()));
+        for (const e of enemies) {
+            if (!e.active) continue;
+            const ex = e.x + e.width * 0.5;
+            const ey = e.y + e.height * 0.5;
+            const r = BLAST_RADIUS + Math.min(e.width, e.height) * 0.5;
+            if ((ex - cx) * (ex - cx) + (ey - cy) * (ey - cy) > r * r) continue;
+            e.hp -= dmg;
+            createDamageText(ex, ey, dmg, '#fdba74', false);
+            if (e.hp <= 0) {
+                e.active = false;
+                e.noBlast = true;
+                onEnemyKilled();
+                score += (e.type === 3 ? 80 : (e.type === 2 ? 150 : (e.type === 1 ? 250 : 100)));
+                createExplosion(ex, ey, e.color, 10);
+            }
+        }
+        if (boss && boss.active && !boss.isInvulnerable) {
+            for (const part of boss.parts) {
+                if (!part.active) continue;
+                const px = boss.x + part.relX;
+                const py = boss.y + part.relY;
+                const r = BLAST_RADIUS + Math.min(part.width, part.height) * 0.5;
+                if ((px - cx) * (px - cx) + (py - cy) * (py - cy) > r * r) continue;
+                part.hp -= dmg;
+                createDamageText(px, py, dmg, '#fdba74', false);
+                if (part.hp <= 0) {
+                    part.active = false;
+                    score += 1500;
+                    sfx.playExplosion(false);
+                    createExplosion(px, py, part.color, 22);
+                    if (boss.currentHp <= 0) {
+                        defeatBoss();
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     // 分裂隕石(type 4)が倒されたら、破片(type 5)を左右に1つずつ出す。
     // 撃破方法(通常弾・各武器)を問わず、HPが尽きて消えた時点でここで拾う。
     function spawnSplitFragments(parent) {
@@ -3302,6 +3402,10 @@ function startGame() {
         let writeIdx = 0;
         for (let readIdx = 0; readIdx < enemies.length; readIdx++) {
             const e = enemies[readIdx];
+            if (!e.active && e.hp <= 0 && !e.noBlast && !e.blasted && passiveLevels.blast > 0) {
+                e.blasted = true;
+                applyBlastDamage(e.x + e.width * 0.5, e.y + e.height * 0.5);
+            }
             if (!e.active && e.type === 4 && e.hp <= 0 && !e.splitDone) spawnSplitFragments(e);
             if (e.active) {
                 enemies[writeIdx++] = e;
@@ -3909,6 +4013,7 @@ function startGame() {
         }
 
         player.update();
+        if (passiveLevels.glassCannon > 0 && player.lives > 1) player.lives = 1;
       　updateWeapons();
 
         if (!isBossActive && !boss) {
@@ -3930,7 +4035,9 @@ function startGame() {
         }
 
         let len = playerBulletPool.length;
-        for (let i = 0; i < len; i++) { const b = playerBulletPool[i]; if (b.active) b.update(); }
+        let activePlayerBullets = 0;
+        for (let i = 0; i < len; i++) { const b = playerBulletPool[i]; if (b.active) { b.update(); if (b.active) activePlayerBullets++; } }
+        splitBudget = Math.max(0, len - PLAYER_BULLET_RESERVE - activePlayerBullets);
         len = enemyBulletPool.length;
         for (let i = 0; i < len; i++) { const b = enemyBulletPool[i]; if (b.active) b.update(); }
         len = particlePool.length;
@@ -4123,6 +4230,22 @@ function startGame() {
             ctx.font = '10px monospace';
             ctx.textAlign = 'left';
             ctx.fillText(`DRONE: ${DRONE_MODE_NAMES[droneMode]}  [E]`, 8, GAME_HEIGHT - 8);
+            ctx.restore();
+        }
+
+        // 撃破爆発のリング
+        if (blastRings.length) {
+            ctx.save();
+            for (let i = blastRings.length - 1; i >= 0; i--) {
+                const rg = blastRings[i];
+                const k = rg.life / 14;
+                ctx.strokeStyle = `rgba(251,146,60,${(0.2 + 0.7 * k).toFixed(3)})`;
+                ctx.lineWidth = 2 + 3 * k;
+                ctx.beginPath();
+                ctx.arc(rg.x, rg.y, BLAST_RADIUS * (1 - k * 0.8), 0, Math.PI * 2);
+                ctx.stroke();
+                if (--rg.life <= 0) blastRings.splice(i, 1);
+            }
             ctx.restore();
         }
 
