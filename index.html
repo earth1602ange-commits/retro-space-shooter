@@ -640,6 +640,7 @@ upgradeButtons: {
     // ===== PASSIVE SKILLS =====
     const PASSIVE_OFFER_CHANCE = 0.5;            // アップグレード画面にパッシブが1枠出る確率
     const PASSIVE_COOLDOWN_CUT_PER_LV = 0.12;    // 武器クールダウン短縮(1Lvあたり)
+    const DODGE_CHANCE_PER_LV = 0.10;              // 敵弾回避率(1Lvあたり10%、最大50%)
     const KILL_CRIT_BONUS = 0.25;                // 撃破後の会心率アップ量
     const KILL_CRIT_DURATION_MS = 8000;          // 1スタックの持続時間
     const KILL_CRIT_MAX_STACKS = 4;              // 重複できる数(撃破ごとに1スタック)
@@ -688,7 +689,7 @@ upgradeButtons: {
     const BLAST_DAMAGE_MULT = 2;
     // パッシブは最大5種類まで所持可能(同じパッシブのレベル上げは所持数に含めない)。
     const MAX_PASSIVES = 5;
-    const passiveLevels = { cooldown: 0, killCrit: 0, lowHpPower: 0, highHpPower: 0, momentum: 0, bossHeal: 0, shield: 0, glassCannon: 0, splitShot: 0, blast: 0 };
+    const passiveLevels = { cooldown: 0, killCrit: 0, lowHpPower: 0, highHpPower: 0, momentum: 0, bossHeal: 0, shield: 0, glassCannon: 0, splitShot: 0, blast: 0, dodge: 0 };
     function getOwnedPassiveCount() {
         let count = 0;
         for (const id of Object.keys(passiveLevels)) if (passiveLevels[id] > 0) count++;
@@ -734,6 +735,10 @@ upgradeButtons: {
         blast: {
             icon: '💣', title: '撃破爆発', maxLevel: 1,
             desc: () => `敵を倒すと爆発し、周囲の敵に攻撃力${BLAST_DAMAGE_MULT}倍のダメージ`
+        },
+        dodge: {
+            icon: '🌀', title: '弾道予測', maxLevel: 5,
+            desc: () => `敵の弾を確率で回避する（現在${Math.round(passiveLevels.dodge * DODGE_CHANCE_PER_LV * 100)}%、Lvごとに+10%、最大50%）`
         }
     };
     const killCritTimers = [];   // 各スタックの残り時間(ms)
@@ -1467,6 +1472,17 @@ const ELECTRO_CHAIN_RANGE = 120;
 
                 ctx.shadowBlur = 0;
                 ctx.restore();
+            } else if (this.type === 'enemyLaser') {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(Math.atan2(this.vy, this.vx));
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 9;
+                ctx.fillStyle = this.color;
+                ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+                ctx.fillStyle = '#e0f2fe';
+                ctx.fillRect(-this.width / 2 + 2, -1, this.width - 4, 2);
+                ctx.restore();
             } else if (this.type === 'homing') {
                 ctx.fillStyle = this.color;
                 ctx.shadowColor = this.color;
@@ -1532,7 +1548,13 @@ const ELECTRO_CHAIN_RANGE = 120;
             this.life = 1.0;
             this.decay = 0.04;
             this.vy = -1.6;
-            this.fontSize = isCritical ? 14 : 10;
+            // 数値ダメージが大きいほど表示を大きくする。文字ラベル(DODGE!/HP+1等)は従来サイズ。
+            const numericDamage = Number(this.text);
+            const isNumericDamage = this.text.trim() !== '' && Number.isFinite(numericDamage);
+            const damageScale = isNumericDamage
+                ? Math.min(2.4, 0.9 + Math.log10(Math.max(1, Math.abs(numericDamage))) * 0.38)
+                : 1;
+            this.fontSize = Math.round((isCritical ? 14 : 10) * damageScale);
             this.active = true;
         }
         update() {
@@ -1931,6 +1953,21 @@ const ELECTRO_CHAIN_RANGE = 120;
                 this.rotAngle = 0;
                 this.rotSpeed = (Math.random() - 0.5) * 0.08;
                 this.shootTimer = 999999;
+            } else if (type === 8) {
+                // 重装雑魚：高HPで、連射・拡散・レーザーのいずれかを装備。ステージ2以降に登場。
+                this.width = 40;
+                this.height = 38;
+                this.hp = Math.round((22 + bossLevel * 4) * ENEMY_LEVEL_SCALE);
+                this.speedX = (Math.random() - 0.5) * 0.8;
+                this.speedY = 0.85 + Math.random() * 0.35;
+                this.weaponMode = Math.floor(Math.random() * 3); // 0:連射 1:拡散 2:レーザー
+                this.color = this.weaponMode === 0 ? '#fb923c' : (this.weaponMode === 1 ? '#c084fc' : '#22d3ee');
+                this.shootTimer = 55 + Math.floor(Math.random() * 45);
+                this.shotBurst = 0;
+                this.laserState = 'idle';
+                this.laserTimer = 0;
+                this.laserAngle = 0;
+                this.laserHitDone = false;
             } else if (type === 6) {
                 // ミサイル艦：ゆっくり降下しながら、自機を追うミサイルを撃つ。
                 this.width = 34;
@@ -2091,6 +2128,59 @@ const ELECTRO_CHAIN_RANGE = 120;
                 }
             }
 
+            if (this.type === 8) {
+                const cx = this.x + this.width / 2;
+                const cy = this.y + this.height / 2;
+                if (this.weaponMode === 2) {
+                    // レーザー型：予告線の間に狙いを固定し、その後に画面を横切る長いビームを照射。
+                    if (this.laserState === 'idle') {
+                        this.shootTimer--;
+                        if (this.shootTimer <= 0 && this.y > 0 && this.y < GAME_HEIGHT - 150) {
+                            this.laserAngle = Math.atan2((player.y + player.height / 2) - cy, (player.x + player.width / 2) - cx);
+                            this.laserState = 'telegraph';
+                            this.laserTimer = 48;
+                            this.laserHitDone = false;
+                        }
+                    } else if (this.laserState === 'telegraph') {
+                        this.laserTimer--;
+                        if (this.laserTimer <= 0) {
+                            this.laserState = 'fire';
+                            this.laserTimer = 24;
+                            this.laserHitDone = false;
+                        }
+                    } else if (this.laserState === 'fire') {
+                        this.laserTimer--;
+                        if (this.laserTimer <= 0) {
+                            this.laserState = 'idle';
+                            this.shootTimer = 115;
+                        }
+                    }
+                } else {
+                    this.shootTimer--;
+                    if (this.shootTimer <= 0 && this.y > 0 && this.y < GAME_HEIGHT - 150) {
+                        const sx = cx;
+                        const sy = this.y + this.height;
+                        const aim = Math.atan2((player.y + player.height / 2) - sy, (player.x + player.width / 2) - sx);
+                        if (this.weaponMode === 0) {
+                            // 連射銃：狙いを少しずつずらした10発バースト。
+                            const spread = (this.shotBurst % 5 - 2) * 0.035;
+                            const a = aim + spread;
+                            spawnFromPool(enemyBulletPool, b => b.spawn(sx, sy, Math.cos(a) * 5.0, Math.sin(a) * 5.0, '#fb923c', 3.5));
+                            this.shotBurst++;
+                            this.shootTimer = this.shotBurst >= 10 ? (this.shotBurst = 0, 95) : 5;
+                        } else {
+                            // 拡散弾：5発の扇状弾を、短い間隔で3連射。
+                            for (let k = -2; k <= 2; k++) {
+                                const a = aim + k * 0.19;
+                                spawnFromPool(enemyBulletPool, b => b.spawn(sx, sy, Math.cos(a) * 4.0, Math.sin(a) * 4.0, '#c084fc', 3.8));
+                            }
+                            this.shotBurst++;
+                            this.shootTimer = this.shotBurst >= 3 ? (this.shotBurst = 0, 105) : 9;
+                        }
+                    }
+                }
+            }
+
             if (this.type === 0 || this.type === 1) {
                 this.shootTimer--;
                 if (this.shootTimer <= 0) {
@@ -2155,6 +2245,54 @@ const ELECTRO_CHAIN_RANGE = 120;
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
+            } else if (this.type === 8) {
+                // レーザー型の予告線／照射ビーム。方向は予告開始時に固定される。
+                if (this.weaponMode === 2 && (this.laserState === 'telegraph' || this.laserState === 'fire')) {
+                    ctx.save();
+                    ctx.rotate(this.laserAngle);
+                    if (this.laserState === 'telegraph') {
+                        const pulse = 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(this.laserTimer * 0.55));
+                        ctx.strokeStyle = `rgba(103,232,249,${pulse})`;
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([10, 8]);
+                        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(1000, 0); ctx.stroke();
+                        ctx.setLineDash([]);
+                    } else {
+                        ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 22;
+                        ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 22;
+                        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(1000, 0); ctx.stroke();
+                        ctx.shadowBlur = 0;
+                        ctx.strokeStyle = '#ecfeff'; ctx.lineWidth = 7;
+                        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(1000, 0); ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+                // 重装雑魚：装甲板・中央コア・武器タイプごとの色で見分けやすくする。
+                ctx.fillStyle = '#1f2937';
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 2.5;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.moveTo(0, 19);
+                ctx.lineTo(19, 8);
+                ctx.lineTo(16, -13);
+                ctx.lineTo(7, -19);
+                ctx.lineTo(-7, -19);
+                ctx.lineTo(-16, -13);
+                ctx.lineTo(-19, 8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = this.color;
+                ctx.fillRect(-12, -5, 24, 10);
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillRect(-4, -2, 8, 4);
+                ctx.strokeStyle = '#e5e7eb';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-15, -14, 8, 6);
+                ctx.strokeRect(7, -14, 8, 6);
             } else if (this.type === 6) {
                 // ミサイル艦：赤い船体と、左右のミサイルポッド
                 ctx.fillStyle = '#7f1d1d';
@@ -3021,7 +3159,7 @@ const ELECTRO_CHAIN_RANGE = 120;
                 const e = this.armEnds(arm);
 
                 // 腕に触れると被弾
-                const rp = ARM_RADIUS + 10;
+                const rp = ARM_RADIUS + 6;
                 if (arm.hitCooldown <= 0 && distToSegmentSq(pcx, pcy, e.x1, e.y1, e.x2, e.y2) <= rp * rp) {
                     player.hit();
                     arm.hitCooldown = 30;
@@ -3066,7 +3204,7 @@ const ELECTRO_CHAIN_RANGE = 120;
                 if (!L.hit) {
                     const pcx = player.x + player.width / 2;
                     const pcy = player.y + player.height / 2;
-                    const r = ARM_BOSS_LASER_HALF_WIDTH + 8;
+                    const r = ARM_BOSS_LASER_HALF_WIDTH + 5;
                     for (const a of this.laserAngles()) {
                         if (distToSegmentSq(pcx, pcy, ox, oy, ox + Math.cos(a) * 1100, oy + Math.sin(a) * 1100) <= r * r) {
                             player.hit();
@@ -4278,7 +4416,7 @@ function startGame() {
                     if (enemy.hp <= 0) {
                         enemy.active = false;
                         onEnemyKilled();
-                        score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                        score += (enemy.type === 8 ? 400 : (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100))));
                         sfx.playExplosion(false);
                         createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color, 12);
                     }
@@ -4334,16 +4472,49 @@ function startGame() {
             }
         }
 
+        // 自機の見た目より少し内側を当たり判定にする(左右・上下を各5px縮小)。
+        const playerHitboxInset = 5;
+        const playerHitLeft = player.x + playerHitboxInset;
+        const playerHitRight = player.x + player.width - playerHitboxInset;
+        const playerHitTop = player.y + playerHitboxInset;
+        const playerHitBottom = player.y + player.height - playerHitboxInset;
+
+        // 重装雑魚レーザー：照射中の長いビームと自機の距離で判定（1照射につき1回）。
+        for (let i = 0; i < enemies.length; i++) {
+            const enemy = enemies[i];
+            if (!enemy.active || enemy.type !== 8 || enemy.weaponMode !== 2 || enemy.laserState !== 'fire' || enemy.laserHitDone) continue;
+            const sx = enemy.x + enemy.width / 2;
+            const sy = enemy.y + enemy.height / 2;
+            const ex = sx + Math.cos(enemy.laserAngle) * 1000;
+            const ey = sy + Math.sin(enemy.laserAngle) * 1000;
+            const px = player.x + player.width / 2;
+            const py = player.y + player.height / 2;
+            const dx = ex - sx, dy = ey - sy;
+            const lenSq = dx * dx + dy * dy;
+            const t = Math.max(0, Math.min(1, ((px - sx) * dx + (py - sy) * dy) / lenSq));
+            const nearestX = sx + t * dx, nearestY = sy + t * dy;
+            if (Math.hypot(px - nearestX, py - nearestY) < 18 + Math.min(player.width, player.height) * 0.35) {
+                enemy.laserHitDone = true;
+                player.hit();
+            }
+        }
+
         // Enemy Bullets vs Player
         for (let i = 0; i < enemyBulletPool.length; i++) {
             const bullet = enemyBulletPool[i];
             if (!bullet.active) continue;
 
-            if (bullet.x > player.x && bullet.x < player.x + player.width &&
-                bullet.y > player.y && bullet.y < player.y + player.height) {
+            if (bullet.x > playerHitLeft && bullet.x < playerHitRight &&
+                bullet.y > playerHitTop && bullet.y < playerHitBottom) {
                 
                 bullet.active = false;
-                player.hit();
+                const dodgeChance = Math.min(0.5, passiveLevels.dodge * DODGE_CHANCE_PER_LV);
+                if (dodgeChance > 0 && Math.random() < dodgeChance) {
+                    createDamageText(player.x + player.width / 2, player.y - 8, 'DODGE!', '#67e8f9', true);
+                    createExplosion(player.x + player.width / 2, player.y + player.height / 2, '#67e8f9', 6);
+                } else {
+                    player.hit();
+                }
             }
         }
 
@@ -4352,8 +4523,8 @@ function startGame() {
             const enemy = enemies[i];
             if (!enemy.active) continue;
 
-            if (enemy.x < player.x + player.width && enemy.x + enemy.width > player.x &&
-                enemy.y < player.y + player.height && enemy.y + enemy.height > player.y) {
+            if (enemy.x < playerHitRight && enemy.x + enemy.width > playerHitLeft &&
+                enemy.y < playerHitBottom && enemy.y + enemy.height > playerHitTop) {
                 
                 enemy.active = false;
                 createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color, 16);
@@ -4370,8 +4541,9 @@ function startGame() {
             if (!part.active) continue;
             const px = boss.x + part.relX - part.width / 2;
             const py = boss.y + part.relY - part.height / 2;
-            if (px < player.x + player.width && px + part.width > player.x &&
-                py < player.y + player.height && py + part.height > player.y) {
+            const inset = 5;
+            if (px < player.x + player.width - inset && px + part.width > player.x + inset &&
+                py < player.y + player.height - inset && py + part.height > player.y + inset) {
                 player.hit();
                 return;
             }
@@ -5098,7 +5270,12 @@ function startGame() {
                 const rand = Math.random();
                 // 0=通常 2=隕石 4=分裂隕石 1=重装
                 let type = rand < 0.40 ? 0 : (rand < 0.65 ? 2 : (rand < 0.77 ? 4 : 1));
-                if (type === 0 && bossLevel >= 1 && Math.random() < MISSILE_SHIP_REPLACE_CHANCE) type = 6;
+                // 重装雑魚はステージ2以降のみ。通常敵の一部を置き換えて出現率を抑える。
+                if ((type === 0 || type === 1) && bossLevel >= 1 && Math.random() < 0.12) {
+                    type = 8;
+                } else if (type === 0 && bossLevel >= 1 && Math.random() < MISSILE_SHIP_REPLACE_CHANCE) {
+                    type = 6;
+                }
                 enemies.push(new Enemy(type));
             }
 
