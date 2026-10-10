@@ -6,7 +6,7 @@
     <title>RETRO SPACE SHOOTER - 無料ブラウザシューティングゲーム</title>
     <meta name="description"
           content="無料で遊べるレトロ風ブラウザシューティングゲーム。高速編隊や60秒ごとに登場するボスを撃破してハイスコアを目指そう！">
-    <!-- RETRO SPACE SHOOTER VERSION: v1.5.22 -->
+    <!-- RETRO SPACE SHOOTER VERSION: v1.5.43 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -41,6 +41,15 @@
             box-shadow: 0 0 20px rgba(0, 240, 255, 0.5), inset 0 0 15px rgba(0, 240, 255, 0.25);
             border: 2px solid #00f0ff;
         }
+        .pause-item { position: relative; min-width: 0; }
+        .pause-item-button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 54px; padding: 5px 2px; border: 1px solid #334155; border-radius: 6px; background: rgba(15,23,42,.95); cursor: help; }
+        .pause-item-button:hover, .pause-item-button:focus-visible { border-color: #22d3ee; background: rgba(8,47,73,.98); outline: none; }
+        .pause-item-icon { font-family: system-ui, sans-serif; font-size: 23px; line-height: 1.2; }
+        .pause-item-name { margin-top: 3px; color: #cbd5e1; font: 8px/1.3 system-ui, sans-serif; text-align: center; overflow-wrap: anywhere; }
+        .pause-item-level { position: absolute; right: 2px; top: 1px; color: #67e8f9; font: bold 9px/1 system-ui, sans-serif; }
+        .pause-tooltip { visibility: hidden; opacity: 0; position: absolute; left: 50%; bottom: calc(100% + 7px); transform: translateX(-50%); z-index: 100; width: min(220px, 70vw); padding: 8px 10px; border: 1px solid #22d3ee; border-radius: 6px; background: #020617; color: #e2e8f0; box-shadow: 0 5px 22px rgba(0,0,0,.8); font: 12px/1.45 system-ui, sans-serif; text-align: left; white-space: normal; pointer-events: none; transition: opacity .12s ease; }
+        .pause-item:hover .pause-tooltip, .pause-item:focus-within .pause-tooltip { visibility: visible; opacity: 1; }
+        @media (max-width: 380px) { .pause-item-button { min-height: 48px; } .pause-item-icon { font-size: 20px; } .pause-item-name { font-size: 7px; } }
         .version-badge {
             position: absolute;
             right: 10px;
@@ -106,7 +115,7 @@
 <body class="w-screen h-screen flex flex-col items-center justify-center relative select-none bg-[#020205]">
 
     <div id="game-container" class="relative w-full max-w-2xl h-full max-h-[900px] flex items-center justify-center">
-        <div class="version-badge" aria-label="Game version">v1.5.22</div>
+        <div class="version-badge" aria-label="Game version">v1.5.43</div>
         <canvas id="gameCanvas" class="w-full h-full object-contain rounded-xl border border-cyan-500/40"></canvas>
         <div class="crt-overlay absolute inset-0 rounded-xl pointer-events-none"></div>
         <div class="crt-scanbar absolute inset-0 rounded-xl pointer-events-none"></div>
@@ -141,9 +150,18 @@
         </div>
 
 
-        <div id="pause-screen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/72 backdrop-blur-[1px] pointer-events-auto hidden z-50">
-            <div class="text-cyan-300 text-3xl md:text-4xl font-bold tracking-[0.18em] neon-text-blue mb-3">PAUSED</div>
-            <div class="text-slate-400 text-[10px] mb-5">P / ESC で再開</div>
+        <div id="pause-screen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-[2px] pointer-events-auto hidden z-50 px-3 py-4 overflow-y-auto">
+            <div class="text-cyan-300 text-3xl md:text-4xl font-bold tracking-[0.18em] neon-text-blue mb-2">PAUSED</div>
+            <div class="text-slate-400 text-[10px] mb-3">P / ESC で再開</div>
+            <div id="pause-inventory" class="w-full max-w-md mb-3 rounded-lg border border-cyan-900 bg-slate-950/90 p-3">
+                <div id="pause-weapons-heading" class="text-cyan-300 text-[10px] tracking-widest mb-2">WEAPONS <span class="text-slate-500">(アイコンにカーソル)</span></div>
+                <div id="pause-weapons" class="grid grid-cols-5 gap-2 mb-3"></div>
+                <div class="border-t border-slate-700 pt-3">
+                    <div id="pause-passives-heading" class="text-fuchsia-300 text-[10px] tracking-widest mb-2">PASSIVE SKILLS</div>
+                    <div id="pause-passives" class="grid grid-cols-5 gap-2"></div>
+                </div>
+                <div id="pause-inventory-empty" class="hidden text-slate-500 text-[10px] text-center py-2">まだ武器・パッシブを所持していません</div>
+            </div>
             <button id="btn-resume" class="px-6 py-3 bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-bold rounded border border-cyan-300 shadow-[0_0_15px_rgba(0,240,255,.35)]">
                 RESUME
             </button>
@@ -480,6 +498,11 @@
         bossHpText: document.getElementById('boss-hp-text'),
         bossWarning: document.getElementById('boss-warning'),
         pauseScreen: document.getElementById('pause-screen'),
+        pauseWeapons: document.getElementById('pause-weapons'),
+        pauseWeaponsHeading: document.getElementById('pause-weapons-heading'),
+        pausePassivesHeading: document.getElementById('pause-passives-heading'),
+        pausePassives: document.getElementById('pause-passives'),
+        pauseInventoryEmpty: document.getElementById('pause-inventory-empty'),
         pauseButton: document.getElementById('btn-pause'),
         resumeButton: document.getElementById('btn-resume'),
         passiveStatus: document.getElementById('passive-status'),
@@ -604,7 +627,7 @@ upgradeButtons: {
     // 4番機ミサイルの旋回力(ラジアン/フレーム)。大きいほど小回りが利く。
     const SHIP4_MISSILE_TURN_RATE = 0.10;
     // HOMING武器の連射設定
-    const HOMING_BURST_COUNT = 4;      // 1回のバーストで撃つ数
+    const HOMING_BASE_BURST_COUNT = 2; // Lv.1の発射数。Lv.2/4で+2発
     const HOMING_SHOT_INTERVAL = 7;    // 1発ごとの間隔(フレーム)
     let homingBurstRemaining = 0;
     let homingShotTimer = 0;
@@ -663,7 +686,14 @@ upgradeButtons: {
     // 撃破爆発: 敵を倒すと爆発。爆発で倒した敵は再爆発しない(連鎖防止)
     const BLAST_RADIUS = 80;
     const BLAST_DAMAGE_MULT = 2;
+    // パッシブは最大5種類まで所持可能(同じパッシブのレベル上げは所持数に含めない)。
+    const MAX_PASSIVES = 5;
     const passiveLevels = { cooldown: 0, killCrit: 0, lowHpPower: 0, highHpPower: 0, momentum: 0, bossHeal: 0, shield: 0, glassCannon: 0, splitShot: 0, blast: 0 };
+    function getOwnedPassiveCount() {
+        let count = 0;
+        for (const id of Object.keys(passiveLevels)) if (passiveLevels[id] > 0) count++;
+        return count;
+    }
     const PASSIVE_DEFS = {
         cooldown: {
             icon: '⏱️', title: '武器クールダウン短縮', maxLevel: 3,
@@ -731,7 +761,8 @@ upgradeButtons: {
     // CRIT_MULT_NORMAL: 通常弾 / CRIT_MULT_SPECIAL: 強化弾(TYPE-3中央弾) / CRIT_MULT_SNIPER: SNIPER
     const CRIT_MULT_NORMAL = 1.5;
     const CRIT_MULT_SPECIAL = 2;
-    const CRIT_MULT_SNIPER = 3;
+    const CRIT_MULT_SNIPER_BASE = 1.5;
+    const getSniperCritMultiplier = () => CRIT_MULT_SNIPER_BASE + (((weaponLevels.sniper || 1) - 1) * 0.5);
     // 会心率の倍率。CRIT_RATE_MULT_SPECIAL: 強化弾の会心率倍率(基本の会心率部分にかかる)
     // CRIT_RATE_MULT_SNIPER: SNIPERの会心率倍率(最終的な会心率にかかる)
     const CRIT_RATE_MULT_SPECIAL = 1.5;
@@ -791,8 +822,10 @@ const WEAPON_DEFS = {
         name: 'DRILL',
         icon: '🔩',
         title: 'DRILL',
-        desc: '機体左右から巨大ドリル弾を2発発射。高火力の直進攻撃。',
+        desc: '機体左右から巨大ドリル弾を2発発射。貫通し、通過中に同じ敵へ複数回ヒットする。レベルアップで威力・連続ヒット性能が上昇し、Lv.5でサイズと持続時間が強化される。',
         theme: 'cyan',
+        baseDamageMultiplier: 1.5,
+        maxLevel: 5,
         cooldown: 72
     },
 
@@ -800,26 +833,31 @@ const WEAPON_DEFS = {
         name: 'ELECTRO',
         icon: '⚡',
         title: 'ELECTRO',
-        desc: '近くの敵に電撃を放ち、最大4体へ連鎖。射程は短め。同じ敵には1イベント中1回だけ命中。',
+        desc: '近くの敵に電撃を放つ。Lv.2で2方向へ分岐、Lv.3で連鎖数+1、Lv.4で3方向へ分岐、Lv.5で連鎖数+1。',
         theme: 'purple',
-        cooldown: 66
+        cooldown: 66,
+        maxLevel: 5
     },
 
     wiper: {
         name: 'WIPER',
         icon: '🧹',
         title: 'WIPER',
-        desc: '前方をワイパー状に薙ぎ払い、敵を攻撃しながら敵弾も防ぐ。',
+        desc: '前方をワイパー状に薙ぎ払い、敵を攻撃しながら敵弾も防ぐ。レベルが上がると棒が長くなり、Lv.3で2本、Lv.4で振れ幅拡大、Lv.5で3本に増える。威力もレベルごとに上昇。',
         theme: 'green',
-        cooldown: 0
+        baseDamageMultiplier: 0.7,
+        cooldown: 0,
+        maxLevel: 5
     },
 
     homing: {
         name: 'HOMING',
         icon: '🎯',
         title: 'HOMING',
-        desc: '左右交互に4連射する追尾弾。最初に狙った敵を追い、倒れたら次の敵へ。途中で各3発に分裂する。',
+        desc: '左右交互に追尾弾を発射。Lv.2/4で発射数+2、Lv.3/5で各弾の分裂数+1。武器レベルが上がるごとに基礎ダメージ倍率が上昇する。',
         theme: 'orange',
+        baseDamageMultiplier: 0.6,
+        maxLevel: 5,
         cooldown: 120
     },
 
@@ -827,8 +865,9 @@ const WEAPON_DEFS = {
         name: 'TRON',
         icon: '🏍️',
         title: 'TRON',
-        desc: '自機の通った軌跡が光の壁になり、触れた敵にダメージ。壁は約4秒残る。持っている間は自機の移動速度も上がる。',
+        desc: '自機の通った軌跡が光の壁になり、触れた敵にダメージ。レベルが上がるごとにダメージ倍率と壁が残る時間が増える。持っている間は自機の移動速度も上がる。',
         theme: 'cyan',
+        maxLevel: 5,
         cooldown: 0
     },
 
@@ -836,8 +875,9 @@ const WEAPON_DEFS = {
         name: 'LASER',
         icon: '🔦',
         title: 'LASER',
-        desc: 'ランダムな向きに光線を2本発射。画面の壁で最大3回反射し、約0.5秒残って触れた敵にダメージ。',
+        desc: 'ランダムな向きに光線を発射。Lv.1は2本、Lv.3で3本、Lv.5で4本に増加。レベルごとにダメージ倍率と光線の持続時間も上昇する。',
         theme: 'red',
+        maxLevel: 5,
         cooldown: 100
     },
 
@@ -845,8 +885,9 @@ const WEAPON_DEFS = {
         name: 'SNIPER',
         icon: '🔭',
         title: 'SNIPER',
-        desc: '最もHPの高い敵(ボスがいればそのパーツ)を約1秒かけて狙い撃つ。弾は貫通し、射線上の敵すべてに大ダメージ。',
+        desc: '最もHPの高い敵(ボスがいればそのパーツ)を狙い撃つ。レベルごとに威力とクリティカルダメージが上昇。クリティカル率倍率は常に2倍。',
         theme: 'yellow',
+        maxLevel: 5,
         cooldown: 150
     },
 
@@ -854,25 +895,31 @@ const WEAPON_DEFS = {
         name: 'MACHINEGUN',
         icon: '🔫',
         title: 'MACHINEGUN',
-        desc: '機体の両側から小さな弾を超高速でばらまく。拡散は広く、射程は中程度。',
+        desc: '機体の両側から大きめの弾を超高速でばらまく。拡散は広く、射程は中程度。',
         theme: 'yellow',
-        cooldown: 5
+        cooldown: 5,
+        maxLevel: 5
     },
 
     drone: {
         name: 'DRONE',
         icon: '🛸',
         title: 'DRONE',
-        desc: '前方へ射撃するドローン。強化するごとに1機増える(最大3機)。追従方法は E キー / MODE ボタンで切り替え(周回・軌跡をなぞる・左右に並ぶ)。',
+        desc: '前方へ射撃するドローン。レベルが上がるごとに1機増える(最大5機)。追従方法は E キー / MODE ボタンで切り替え(周回・軌跡をなぞる・左右に並ぶ)。',
         theme: 'purple',
         cooldown: 36,
-        maxLevel: 3
+        maxLevel: 5
     }
 };
 
 // 武器レベル(maxLevel未指定の武器は1回取得でMAX)
 const weaponLevels = {};
 const weaponMaxLevel = id => (WEAPON_DEFS[id] && WEAPON_DEFS[id].maxLevel) || 1;
+const DRILL_DAMAGE_MULTIPLIERS = [0, 1.5, 1.8, 1.8, 2.2, 2.6];
+function drillHitCooldownFrames() {
+    const level = weaponLevels.drill || 1;
+    return level >= 5 ? 3 : (level >= 3 ? 4 : 6);
+}
 
 // DRONE tuning: 追従方法 0=周回(ORBIT) 1=軌跡をなぞる(TRAIL) 2=左右に並ぶ(WING)
 const DRONE_MODE_NAMES = ['ORBIT 周回', 'TRAIL 追従', 'WING 左右'];
@@ -888,7 +935,9 @@ const TRAIL_BOTTOM_MARGIN = 14;    // 開始時の軌跡が画面下端からは
 const WING_OFFSETS = [
     [{ dx: 44, dy: 8 }],
     [{ dx: -44, dy: 8 }, { dx: 44, dy: 8 }],
-    [{ dx: -60, dy: 8 }, { dx: 60, dy: 8 }, { dx: 0, dy: 38 }]
+    [{ dx: -60, dy: 8 }, { dx: 60, dy: 8 }, { dx: 0, dy: 38 }],
+    [{ dx: -60, dy: 8 }, { dx: -20, dy: 34 }, { dx: 20, dy: 34 }, { dx: 60, dy: 8 }],
+    [{ dx: -65, dy: 8 }, { dx: -32, dy: 32 }, { dx: 0, dy: 44 }, { dx: 32, dy: 32 }, { dx: 65, dy: 8 }]
 ];
 const dronePos = [];
 const playerPath = [];
@@ -896,7 +945,7 @@ let orbitAngle = 0;
 
 // 軌跡(playerPath: 古い順)を更新する。動いた距離がTRAIL_SAMPLE_DISTを超えたときだけ記録するので、止まっている間は変化しない。
 function updateTrailPath(pcx, pcy) {
-    const keep = TRAIL_DRONE_DISTANCE * 3 + 40;
+    const keep = TRAIL_DRONE_DISTANCE * 5 + 40;
     if (playerPath.length === 0) {
         // 開始時・ドローン取得時: 自機の後ろ(下)へ伸びる軌跡を仮に作る。下端に着いたら横へ折れる。
         const dirX = pcx < GAME_WIDTH / 2 ? 1 : -1;
@@ -966,8 +1015,11 @@ function cycleDroneMode() {
 const MG_SPREAD = 0.8;       // 発射角のばらつき(ラジアン、±)
 const MG_LIFE = 34;          // 弾の寿命(フレーム)= 射程
 const MG_DAMAGE_MULT = 0.4;
-const MG_BURST_FRAMES = 150;  // 連射できる時間(約2.5秒)
+const MG_BURST_FRAMES = 150;  // Lv.3を基準にした連射時間(約2.5秒)
 const MG_REST_FRAMES = 90;   // 連射後のクールダウン(約1.5秒。冷却短縮パッシブが効く)
+const getMachinegunLevel = () => weaponLevels.machinegun || 1;
+const getMachinegunBurstFrames = () => getMachinegunLevel() === 1 ? 90 : getMachinegunLevel() === 2 ? 120 : MG_BURST_FRAMES;
+const getMachinegunShotCooldown = () => getMachinegunLevel() >= 5 ? 3 : getMachinegunLevel() >= 4 ? 4 : WEAPON_DEFS.machinegun.cooldown;
 let mgBurst = MG_BURST_FRAMES;
 let mgRest = 0;
 function mgRestFrames() {
@@ -985,22 +1037,40 @@ const weaponTimers = {
     drone: 0
 };
 
-// WIPER tuning: 左から右へ一定速度で動く縦棒
-const WIPER_REACH = 37.5;
-const WIPER_X_MIN = -70;
-const WIPER_X_MAX = 70;
+// WIPER tuning: 縦棒が左右に一定速度で動く。レベルで 棒の長さ・本数・振れ幅・威力 が変わる。
+// Lv1: 長さ37.5 / 1本 / ±70 / 0.7倍   Lv2: 長さ55 / 0.9倍   Lv3: 2本(逆向きにも動く) / 1.1倍
+// Lv4: 長さ75 / 振れ幅±100 / 1.3倍   Lv5: 3本(動くタイミングをずらす) / 1.5倍
 const WIPER_SPEED = 7.5;
+const WIPER_HIT_INTERVAL = 8;
+const WIPER_REACHES = [37.5, 55, 55, 75, 75];
+const getWiperLevel = () => Math.max(1, Math.min(5, weaponLevels.wiper || 1));
+const getWiperReach = () => WIPER_REACHES[getWiperLevel() - 1];
+const getWiperHalfRange = () => getWiperLevel() >= 4 ? 100 : 70;
+const getWiperBarCount = () => getWiperLevel() >= 5 ? 3 : (getWiperLevel() >= 3 ? 2 : 1);
+const getWiperDamageMultiplier = () => WEAPON_DEFS.wiper.baseDamageMultiplier + (getWiperLevel() - 1) * 0.2;
 
-let wiperX = WIPER_X_MIN;
+let wiperT = 0;   // 棒が左端(0)から右端(1)へ進む割合
+
+// 自機の中心から見た、各棒のx位置。2本目は逆向きに、3本目以降は動くタイミングをずらす。
+function getWiperBarOffsets() {
+    const half = getWiperHalfRange();
+    const toX = t => -half + 2 * half * t;
+    const n = getWiperBarCount();
+    if (n === 1) return [toX(wiperT)];
+    if (n === 2) return [toX(wiperT), -toX(wiperT)];
+    return [0, 1 / 3, 2 / 3].map(k => toX((wiperT + k) % 1));
+}
 
 const wiperHitTimers = new Map();
 
 // TRON tuning
-// TRON_TRAIL_LIFE: 軌跡が残るフレーム数(60fps換算で約4秒)
+// TRON_TRAIL_BASE_LIFE: Lv.1の軌跡が残るフレーム数(60fps換算で約4秒)
 // TRON_SPEED_MULT: TRON所持中の移動速度倍率(キー操作)
 // TRON_TOUCH_FOLLOW: TRON所持中のタッチ追従率(通常は0.32)
 // TRON_HIT_INTERVAL: 同じ敵への連続ヒット間隔(フレーム)
-const TRON_TRAIL_LIFE = 240;
+const TRON_TRAIL_BASE_LIFE = 240;
+const getTronTrailLife = () => TRON_TRAIL_BASE_LIFE + ((weaponLevels.tron || 1) - 1) * 60;
+const getTronDamageMultiplier = () => 0.6 + ((weaponLevels.tron || 1) - 1) * 0.2;
 const TRON_SPEED_MULT = 1.25;
 const TRON_TOUCH_FOLLOW = 0.40;
 const TRON_HIT_INTERVAL = 10;
@@ -1015,12 +1085,17 @@ const tronHitTimers = new Map();
 // LASER_MAX_LENGTH: 光線の総延長(px)
 // LASER_LIFE: 光線が残るフレーム数
 // LASER_HIT_INTERVAL: 同じ標的への連続ヒット間隔(フレーム)
-const LASER_BEAMS = 2;
+const LASER_BASE_BEAMS = 2;
 const LASER_SPREAD = Math.PI * 80 / 180;
 const LASER_MAX_BOUNCES = 3;
 const LASER_MAX_LENGTH = 1400;
-const LASER_LIFE = 30;
+const LASER_BASE_LIFE = 30;
+const LASER_LIFE_PER_LEVEL = 6; // レベルごとに約0.1秒延長
 const LASER_HIT_INTERVAL = 10;
+const getLaserLevel = () => weaponLevels.laser || 1;
+const getLaserBeamCount = () => LASER_BASE_BEAMS + (getLaserLevel() >= 3 ? 1 : 0) + (getLaserLevel() >= 5 ? 1 : 0);
+const getLaserLife = () => LASER_BASE_LIFE + (getLaserLevel() - 1) * LASER_LIFE_PER_LEVEL;
+const getLaserDamageMultiplier = () => 0.8 + (getLaserLevel() - 1) * 0.2;
 const LASER_HALF_WIDTH = 4;
 const laserBeams = [];
 
@@ -1035,7 +1110,8 @@ function sniperAimFrames() {
     const cut = Math.min(0.6, passiveLevels.cooldown * PASSIVE_COOLDOWN_CUT_PER_LV);
     return Math.max(1, Math.round(SNIPER_AIM_FRAMES * (1 - cut)));
 }
-const SNIPER_DAMAGE_MULT = 8;
+const SNIPER_DAMAGE_MULT_BASE = 2;
+const getSniperDamageMultiplier = () => SNIPER_DAMAGE_MULT_BASE + (((weaponLevels.sniper || 1) - 1) * 2);
 const SNIPER_FLASH_FRAMES = 14;
 const SNIPER_RANGE = 1400;
 const SNIPER_HALF_WIDTH = 4;
@@ -1161,6 +1237,7 @@ const ELECTRO_CHAIN_RANGE = 120;
         constructor() {
             this.active = false;
             this.hitSet = new Set();
+            this.hitCooldowns = new Map(); // ドリル弾が同じ敵へ連続ヒットするまでの待ち時間
         }
 
         spawn(x, y, vx, vy, color = '#ff0055', radius = 3, isSplit = false, splitTimer = 0, type = 'normal', life = 999, width = 6, height = 6, critChanceMultiplier = 1, critDamageMultiplier = 1) {
@@ -1186,11 +1263,13 @@ const ELECTRO_CHAIN_RANGE = 120;
             this.canGuard = false;
             this.splitWeapon = false;
             this.homingFast = false;
+            this.homingSplitCount = 2;
             this.homingMaxSpeed = 0;   // 0なら既定値(通常4.2 / 分裂後8.8)
             this.homingTurnRate = 0;   // >0なら「旋回角制限」方式で追尾(周回防止)
             this.lockTarget = null;    // ロックオン中の標的(敵 or ボスパーツ)
             this.lockIsPart = false;
             this.hitSet.clear();
+            this.hitCooldowns.clear();
         }
 
         isLockValid() {
@@ -1268,6 +1347,14 @@ const ELECTRO_CHAIN_RANGE = 120;
                 }
             }
 
+            // ドリル弾は同じ敵に連続ヒットできるが、毎フレームの多重ダメージは防ぐ。
+            if (this.type === 'drill' && this.hitCooldowns.size > 0) {
+                for (const [target, frames] of this.hitCooldowns) {
+                    if (frames <= 1 || !target || target.active === false) this.hitCooldowns.delete(target);
+                    else this.hitCooldowns.set(target, frames - 1);
+                }
+            }
+
             this.x += this.vx;
             this.y += this.vy;
             this.life--;
@@ -1286,11 +1373,14 @@ const ELECTRO_CHAIN_RANGE = 120;
                     this.active = false;
 
                     if (this.type === 'homing' && this.splitWeapon) {
-                        // HOMING武器：途中で3発に分裂。分裂弾も敵を追尾する。
+                        // HOMING武器：レベルに応じた数に分裂。分裂弾も敵を追尾する。
                         const baseAngle = Math.atan2(this.vy, this.vx);
-                        const splitAngle = 0.42;
+                        const splitCount = this.homingSplitCount || 2;
+                        const spread = 0.42;
                         const speed = 8.8;
-                        for (const angle of [baseAngle - splitAngle, baseAngle, baseAngle + splitAngle]) {
+                        const splitDamageMultiplier = this.dmgMult || 1;
+                        for (let i = 0; i < splitCount; i++) {
+                            const angle = baseAngle + (i - (splitCount - 1) / 2) * spread;
                             spawnFromPool(playerBulletPool, b => {
                                 b.spawn(
                                     this.x, this.y,
@@ -1301,6 +1391,8 @@ const ELECTRO_CHAIN_RANGE = 120;
                                     1, 1
                                 );
                                 b.splitWeapon = false;
+                                b.homingSplitCount = 2;
+                                b.dmgMult = splitDamageMultiplier;
                                 b.homingFast = true;
                                 b.lockTarget = this.lockTarget;
                                 b.lockIsPart = this.lockIsPart;
@@ -1465,7 +1557,7 @@ const ELECTRO_CHAIN_RANGE = 120;
     }
 
     const playerBulletPool = createPool(Bullet, 300);
-    const enemyBulletPool = createPool(Bullet, 300);
+    const enemyBulletPool = createPool(Bullet, 600);
     const particlePool = createPool(Particle, 350);
     const damageTextPool = createPool(DamageText, 120);
 
@@ -2155,6 +2247,14 @@ const ELECTRO_CHAIN_RANGE = 120;
     // Boss
     // ---------------------------------------------------------------
     // ボス突進攻撃の調整用(フレーム単位。60fps想定で 30フレーム ≒ 0.5秒)
+    // ボスのHP倍率: プレイヤーの火力は、武器レベルとパッシブで倍々に伸びるため、
+    // ボスのHPも レベル(倒した数)ごとに 基礎HP × BASE × GROWTH^レベル で伸ばす。
+    const BOSS_HP_SCALE_BASE = 3.5;     // レベル0の倍率
+    const BOSS_HP_GROWTH = 1.5;         // レベルが1上がるごとの倍率の伸び
+    function bossHp(baseHp, level) {
+        return Math.round(baseHp * BOSS_HP_SCALE_BASE * Math.pow(BOSS_HP_GROWTH, level));
+    }
+
     const BOSS_CHARGE_TELEGRAPH_FRAMES = 45;  // 点滅時間(約0.75秒)
     const BOSS_CHARGE_FRONT_WIDTH = 70;       // 「目の前」と見なす左右の幅(px)
     const BOSS_CHARGE_CHANCE = 0.5;           // 条件を満たしたときに実際に突進する確率
@@ -2165,8 +2265,90 @@ const ELECTRO_CHAIN_RANGE = 120;
     const BOSS_CHARGE_COOLDOWN_BASE = 420;    // 突進後の待機フレーム(レベルで短縮)
     const BOSS_CHARGE_COOLDOWN_MIN = 240;
 
+    // ---------------------------------------------------------------
+    // 弾幕(ボス共通): ボスのレベル(倒した数)が上がるほど、弾の数・種類が増える。
+    //  扇弾 : 自機を狙う弾が、レベルに応じて2発、3発…と増える
+    //  リング: 全方位の輪。一部に隙間があり、隙間は自機の方向の近くに開く(レベル1以上)
+    //  螺旋  : 回転しながら連射する弾(レベル3以上、レベル7以上は2本腕)
+    // ---------------------------------------------------------------
+    const BOSS_RING_BASE_COUNT = 10;     // リングの弾数(レベルごとに+2、上限まで)
+    const BOSS_RING_MAX_COUNT = 24;
+    const BOSS_RING_GAP = 0.6;           // リングの隙間の幅(ラジアン)
+    const BOSS_RING_INTERVAL_BASE = 250; // リングの発射間隔(レベルごとに短縮)
+    const BOSS_RING_INTERVAL_MIN = 130;
+    const BOSS_SPIRAL_INTERVAL_BASE = 520;
+    const BOSS_SPIRAL_INTERVAL_MIN = 300;
+    const BOSS_SPIRAL_FRAMES = 90;       // 螺旋を撃ち続ける時間
+    const BOSS_SPIRAL_STEP = 0.42;       // 1発ごとに回る角度
+
+    function bossFireFan(x, y, baseAngle, count, spread, speed, color, radius = 3.5) {
+        for (let i = 0; i < count; i++) {
+            const a = baseAngle + (i - (count - 1) / 2) * spread;
+            spawnFromPool(enemyBulletPool, b => b.spawn(
+                x, y, Math.cos(a) * speed, Math.sin(a) * speed, color, radius, false, 0
+            ));
+        }
+    }
+
+    // gapAngle が null でなければ、その方向を中心に gapWidth の隙間を空ける
+    function bossFireRing(x, y, count, speed, color, gapAngle, gapWidth) {
+        const offset = Math.random() * Math.PI * 2;
+        for (let i = 0; i < count; i++) {
+            const a = offset + (i / count) * Math.PI * 2;
+            if (gapAngle !== null) {
+                let d = Math.atan2(Math.sin(a - gapAngle), Math.cos(a - gapAngle));
+                if (Math.abs(d) < gapWidth / 2) continue;
+            }
+            spawnFromPool(enemyBulletPool, b => b.spawn(
+                x, y, Math.cos(a) * speed, Math.sin(a) * speed, color, 3.5, false, 0
+            ));
+        }
+    }
+
+    // リングと螺旋の管理。ボスが射撃してよい状態のときに、毎フレーム呼ぶ。
+    function updateBossBarrage(boss, ox, oy, ringMinLevel, spiralMinLevel) {
+        const level = boss.level;
+
+        if (level >= ringMinLevel) {
+            boss.ringTimer--;
+            if (boss.ringTimer <= 0) {
+                boss.ringTimer = Math.max(BOSS_RING_INTERVAL_MIN, BOSS_RING_INTERVAL_BASE - level * 14);
+                const count = Math.min(BOSS_RING_MAX_COUNT, BOSS_RING_BASE_COUNT + level * 2);
+                const toPlayer = Math.atan2(player.y - oy, player.x - ox);
+                const gap = toPlayer + (Math.random() - 0.5) * 0.8;
+                bossFireRing(ox, oy, count, Math.min(4, 2.7 + level * 0.08), '#fb923c', gap, BOSS_RING_GAP);
+            }
+        }
+
+        if (level >= spiralMinLevel) {
+            if (boss.spiralLeft > 0) {
+                boss.spiralLeft--;
+                if (boss.spiralLeft % 4 === 0) {
+                    boss.spiralAngle += BOSS_SPIRAL_STEP;
+                    const arms = level >= spiralMinLevel + 4 ? 2 : 1;
+                    for (let k = 0; k < arms; k++) {
+                        const a = boss.spiralAngle + k * Math.PI;
+                        spawnFromPool(enemyBulletPool, b => b.spawn(
+                            ox, oy, Math.cos(a) * 3.1, Math.sin(a) * 3.1, '#a78bfa', 3.2, false, 0
+                        ));
+                    }
+                }
+            } else {
+                boss.spiralTimer--;
+                if (boss.spiralTimer <= 0) {
+                    boss.spiralTimer = Math.max(BOSS_SPIRAL_INTERVAL_MIN, BOSS_SPIRAL_INTERVAL_BASE - level * 20);
+                    boss.spiralLeft = BOSS_SPIRAL_FRAMES;
+                }
+            }
+        }
+    }
+
     class Boss {
         constructor(level = 0) {
+            this.ringTimer = 220;        // 弾幕: リング
+            this.spiralTimer = 420;      // 弾幕: 螺旋
+            this.spiralLeft = 0;
+            this.spiralAngle = 0;
             this.x = GAME_WIDTH / 2;
             this.y = -120;
             this.targetY = 90;
@@ -2191,8 +2373,8 @@ const ELECTRO_CHAIN_RANGE = 120;
                     relY: -10,
                     width: 48,
                     height: 48,
-                    maxHp: 90 + level * 50,
-                    hp: 90 + level * 50,
+                    maxHp: bossHp(90 + level * 50, level),
+                    hp: bossHp(90 + level * 50, level),
                     active: true,
                     color: '#ff00aa',
                     shootCooldown: 38
@@ -2204,8 +2386,8 @@ const ELECTRO_CHAIN_RANGE = 120;
                     relY: 15,
                     width: 36,
                     height: 36,
-                    maxHp: 60 + level * 35,
-                    hp: 60 + level * 35,
+                    maxHp: bossHp(60 + level * 35, level),
+                    hp: bossHp(60 + level * 35, level),
                     active: true,
                     color: '#00f0ff',
                     shootCooldown: 28
@@ -2217,8 +2399,8 @@ const ELECTRO_CHAIN_RANGE = 120;
                     relY: 15,
                     width: 36,
                     height: 36,
-                    maxHp: 60 + level * 35,
-                    hp: 60 + level * 35,
+                    maxHp: bossHp(60 + level * 35, level),
+                    hp: bossHp(60 + level * 35, level),
                     active: true,
                     color: '#ffcc00',
                     shootCooldown: 18
@@ -2326,6 +2508,9 @@ const ELECTRO_CHAIN_RANGE = 120;
                 sfx.playExplosion(false);
             }
 
+            // 弾幕: リング(レベル1〜)・螺旋(レベル3〜)
+            updateBossBarrage(this, this.x, this.y + 20, 1, 3);
+
             for (let i = 0; i < this.parts.length; i++) {
                 let part = this.parts[i];
                 if (!part.active) continue;
@@ -2333,32 +2518,39 @@ const ELECTRO_CHAIN_RANGE = 120;
                 const px = this.x + part.relX;
                 const py = this.y + part.relY;
 
-                if (this.timer % part.shootCooldown === 0) {
+                // レベルが上がるほど発射間隔が短くなる(下限は基本の70%)
+                const cooldown = Math.max(Math.round(part.shootCooldown * 0.7), part.shootCooldown - this.level * 2);
+                if (this.timer % cooldown === 0) {
                     if (part.id === 'split') {
-                        const angle = Math.PI / 2 + (Math.random() - 0.5) * 0.2;
-                        spawnFromPool(enemyBulletPool, b => b.spawn(
-                            px, py + 15,
-                            Math.cos(angle) * 3.2,
-                            Math.sin(angle) * 3.2,
-                            '#ff00aa', 7, true, 42
-                        ));
+                        // 分裂弾: レベル4以上で3発の扇状
+                        const count = 1 + 2 * Math.min(1, Math.floor(this.level / 4));
+                        for (let k = 0; k < count; k++) {
+                            const angle = Math.PI / 2 + (k - (count - 1) / 2) * 0.32 + (Math.random() - 0.5) * 0.2;
+                            spawnFromPool(enemyBulletPool, b => b.spawn(
+                                px, py + 15,
+                                Math.cos(angle) * 3.2,
+                                Math.sin(angle) * 3.2,
+                                '#ff00aa', 7, true, 42
+                            ));
+                        }
                     } else if (part.id === 'aim') {
+                        // 狙い撃ち: レベル3ごとに1発ずつ増える扇状(最大4発)
+                        const count = 1 + Math.min(3, Math.floor(this.level / 3));
                         const angle = Math.atan2(player.y - py, player.x - px);
-                        spawnFromPool(enemyBulletPool, b => b.spawn(
-                            px, py + 10,
-                            Math.cos(angle) * 5.4,
-                            Math.sin(angle) * 5.4,
-                            '#00f0ff', 3.5, false, 0
-                        ));
+                        bossFireFan(px, py + 10, angle, count, 0.17, 5.4, '#00f0ff', 3.5);
                     } else if (part.id === 'random') {
-                        const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.8;
-                        const speed = Math.random() * 2.7 + 3.0;
-                        spawnFromPool(enemyBulletPool, b => b.spawn(
-                            px, py + 10,
-                            Math.cos(angle) * speed,
-                            Math.sin(angle) * speed,
-                            '#ffcc00', 3, false, 0
-                        ));
+                        // ばらまき: レベル3ごとに1回の弾数が増える(最大3発)
+                        const count = 1 + Math.min(2, Math.floor(this.level / 3));
+                        for (let k = 0; k < count; k++) {
+                            const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.8;
+                            const speed = Math.random() * 2.7 + 3.0;
+                            spawnFromPool(enemyBulletPool, b => b.spawn(
+                                px, py + 10,
+                                Math.cos(angle) * speed,
+                                Math.sin(angle) * speed,
+                                '#ffcc00', 3, false, 0
+                            ));
+                        }
                     }
                 }
             }
@@ -2461,6 +2653,697 @@ const ELECTRO_CHAIN_RANGE = 120;
             }
 
             ctx.restore();
+        }
+    }
+
+
+    // ---------------------------------------------------------------
+    // ミサイル空母(ボス2): ステージ2, 4, 6... で登場(bossLevel が奇数のとき)
+    //  第1形態: 左右のハンガーからミサイル(Enemy type 7)を交互に発射。中央コアは装甲に覆われ、攻撃できない。
+    //  第2形態: ハンガーを2つとも壊すとコアが露出。扇状の弾・ミサイル・突進で攻撃してくる。
+    // ---------------------------------------------------------------
+    const CARRIER_SWAY_RANGE = 100;          // 第1形態の左右の揺れ幅(px)
+    const CARRIER_LAUNCH_INTERVAL = 95;      // ミサイル発射間隔(レベルで短縮)
+    const CARRIER_LAUNCH_MIN_INTERVAL = 60;
+    const CARRIER_MISSILE_CAP_BASE = 5;      // 同時に飛ぶミサイル数の上限(レベルで増加、最大+3)
+    const CARRIER_FAN_BULLETS = 5;           // 第2形態の扇弾の数
+    const CARRIER_FAN_SPREAD = 0.25;         // 扇弾の角度間隔(ラジアン)
+    const CARRIER_FAN_SPEED = 4.2;
+
+    class MissileCarrier extends Boss {
+        constructor(level = 0) {
+            super(level);
+            this.targetY = 80;
+            this.phase = 1;
+            this.launchTimer = 70;
+            this.nextHangar = 0;
+            this.fanTimer = 60;
+            this.coreMissileTimer = 150;
+            this.revealFlash = 0;
+            this.hangarFlash = [0, 0];
+
+            const hangarHp = bossHp(70 + level * 40, level);
+            const coreHp = bossHp(100 + level * 50, level);
+            this.parts = [
+                { id: 'hangarL', name: '左ハンガー', relX: -78, relY: 8, width: 48, height: 36, maxHp: hangarHp, hp: hangarHp, active: true, color: '#fb923c' },
+                { id: 'hangarR', name: '右ハンガー', relX: 78, relY: 8, width: 48, height: 36, maxHp: hangarHp, hp: hangarHp, active: true, color: '#fb923c' },
+                // 装甲コア: ハンガーを壊すまで active=false(攻撃対象外)。HPだけはボス全体のHPに数える。
+                { id: 'core', name: '中央コア', relX: 0, relY: 0, width: 54, height: 54, maxHp: coreHp, hp: coreHp, active: false, hidden: true, color: '#f43f5e' }
+            ];
+            this.maxHp = this.parts.reduce((sum, part) => sum + part.maxHp, 0);
+        }
+
+        get currentHp() {
+            return this.parts.reduce((sum, part) => sum + ((part.active || part.hidden) ? Math.max(0, part.hp) : 0), 0);
+        }
+
+        countMissiles() {
+            let c = 0;
+            for (const e of enemies) if (e.active && e.type === 7) c++;
+            return c;
+        }
+
+        launchMissile(x, y, heading) {
+            if (this.countMissiles() >= CARRIER_MISSILE_CAP_BASE + Math.min(3, this.level)) return false;
+            const m = new Enemy(7);
+            m.x = x - m.width / 2;
+            m.y = y;
+            m.heading = heading;
+            m.rotAngle = heading;
+            enemies.push(m);
+            return true;
+        }
+
+        update() {
+            this.timer++;
+
+            if (this.y < this.targetY) {
+                this.y += 1.5;
+                this.isInvulnerable = true;
+                return;
+            }
+            this.isInvulnerable = false;
+            if (this.revealFlash > 0) this.revealFlash--;
+            for (let i = 0; i < 2; i++) if (this.hangarFlash[i] > 0) this.hangarFlash[i]--;
+
+            const core = this.parts[2];
+            if (this.phase === 1 && !this.parts[0].active && !this.parts[1].active) {
+                // 第2形態へ: コアの装甲が外れる
+                this.phase = 2;
+                core.hidden = false;
+                core.active = true;
+                this.revealFlash = 60;
+                this.chargeState = 'idle';
+                this.chargeCooldown = 150;
+                sfx.playWarning();
+                createExplosion(this.x, this.y, '#f43f5e', 36);
+            }
+
+            if (this.phase === 1) {
+                this.swayPhase += 0.02;
+                this.x = GAME_WIDTH / 2 + Math.sin(this.swayPhase) * CARRIER_SWAY_RANGE;
+                this.y = this.targetY;
+
+                const aliveIdx = [0, 1].filter(i => this.parts[i].active);
+                if (aliveIdx.length === 0) return;
+                this.launchTimer--;
+                if (this.launchTimer <= 0) {
+                    // 1基だけになると、発射間隔が少し短くなる
+                    const base = Math.max(CARRIER_LAUNCH_MIN_INTERVAL, CARRIER_LAUNCH_INTERVAL - this.level * 5);
+                    this.launchTimer = aliveIdx.length === 1 ? Math.round(base * 0.8) : base;
+                    this.nextHangar = (this.nextHangar + 1) % 2;
+                    const idx = aliveIdx.includes(this.nextHangar) ? this.nextHangar : aliveIdx[0];
+                    const part = this.parts[idx];
+                    const px = this.x + part.relX;
+                    const py = this.y + part.relY + part.height / 2;
+                    const damaged = part.hp < part.maxHp * 0.5;
+                    const dir = idx === 0 ? -1 : 1;
+                    this.launchMissile(px, py, Math.PI / 2 + dir * 0.35);
+                    if (damaged) this.launchMissile(px, py, Math.PI / 2 - dir * 0.15);   // 損傷すると2発撃つ
+                    this.hangarFlash[idx] = 14;
+                    createExplosion(px, py, '#fb923c', 5);
+                }
+
+                // ハンガーからの扇弾: レベル1で2発、3で3発、5で4発…(最大6発)
+                const fanInterval = Math.max(55, 90 - this.level * 5);
+                if (this.timer % fanInterval === 0) {
+                    const count = Math.min(6, 2 + Math.floor(this.level / 2));
+                    for (const i of aliveIdx) {
+                        const part = this.parts[i];
+                        const px = this.x + part.relX;
+                        const py = this.y + part.relY + part.height / 2;
+                        bossFireFan(px, py, Math.atan2(player.y - py, player.x - px), count, 0.2, 3.8, '#fdba74', 3.5);
+                    }
+                }
+                return;
+            }
+
+            // 第2形態: 左右移動と突進(Bossと共通)。突進・予告中は撃たない。
+            this.updateMovementAndCharge();
+            if (this.chargeState !== 'idle') return;
+
+            const cx = this.x + core.relX;
+            const cy = this.y + core.relY;
+
+            this.fanTimer--;
+            if (this.fanTimer <= 0) {
+                this.fanTimer = Math.max(36, 56 - this.level * 2);
+                // 扇弾の数: 5発から、レベル2ごとに+2発(最大11発)
+                const count = Math.min(11, CARRIER_FAN_BULLETS + 2 * Math.floor(this.level / 2));
+                bossFireFan(cx, cy + 14, Math.atan2(player.y - cy, player.x - cx), count, CARRIER_FAN_SPREAD, CARRIER_FAN_SPEED, '#f43f5e', 3.5);
+            }
+
+            // 弾幕: リング(レベル3〜)・螺旋(レベル5〜)
+            updateBossBarrage(this, cx, cy + 10, 3, 5);
+
+            this.coreMissileTimer--;
+            if (this.coreMissileTimer <= 0) {
+                this.coreMissileTimer = 190;
+                this.launchMissile(cx, cy + 30, Math.PI / 2);
+            }
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+
+            if (this.chargeState === 'telegraph') {
+                ctx.save();
+                ctx.fillStyle = 'rgba(255, 30, 60, 0.16)';
+                ctx.fillRect(-BOSS_CHARGE_FRONT_WIDTH, 40, BOSS_CHARGE_FRONT_WIDTH * 2, GAME_HEIGHT);
+                ctx.restore();
+                ctx.globalAlpha = (Math.floor(this.chargeTimer / 3) % 2 === 0) ? 0.3 : 1;
+            }
+
+            if (this.isInvulnerable) {
+                ctx.save();
+                ctx.strokeStyle = `rgba(255,255,255,${0.35 + Math.sin(this.timer * 0.3) * 0.2})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, 112 + Math.sin(this.timer * 0.18) * 5, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 船体
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-128, -4);
+            ctx.lineTo(-100, -32);
+            ctx.lineTo(100, -32);
+            ctx.lineTo(128, -4);
+            ctx.lineTo(96, 36);
+            ctx.lineTo(-96, 36);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // ハンガー
+            for (let i = 0; i < 2; i++) {
+                const part = this.parts[i];
+                ctx.save();
+                ctx.translate(part.relX, part.relY);
+                if (part.active) {
+                    const glow = this.hangarFlash[i] > 0 ? 1 : 0.35 + Math.sin(this.timer * 0.12 + i) * 0.12;
+                    ctx.fillStyle = '#334155';
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.fillRect(-part.width / 2, -part.height / 2, part.width, part.height);
+                    ctx.strokeRect(-part.width / 2, -part.height / 2, part.width, part.height);
+                    ctx.fillStyle = `rgba(251,146,60,${glow.toFixed(3)})`;
+                    ctx.fillRect(-part.width / 2 + 6, part.height / 2 - 12, part.width - 12, 8);
+                } else {
+                    ctx.fillStyle = '#0f172a';
+                    ctx.strokeStyle = '#475569';
+                    ctx.lineWidth = 1;
+                    ctx.fillRect(-part.width / 2, -part.height / 2, part.width, part.height);
+                    ctx.strokeRect(-part.width / 2, -part.height / 2, part.width, part.height);
+                    if (Math.random() < 0.15) {
+                        spawnFromPool(particlePool, p => p.spawn(
+                            this.x + part.relX + (Math.random() - 0.5) * part.width,
+                            this.y + part.relY + (Math.random() - 0.5) * part.height,
+                            '#64748b'
+                        ));
+                    }
+                }
+                ctx.restore();
+            }
+
+            // コア: 装甲中は灰色の六角形(鎖のような線)、露出後は赤く脈打つ
+            const core = this.parts[2];
+            ctx.save();
+            ctx.translate(core.relX, core.relY);
+            ctx.beginPath();
+            ctx.moveTo(0, -core.height / 2);
+            ctx.lineTo(core.width / 2, -core.height / 4);
+            ctx.lineTo(core.width / 2, core.height / 4);
+            ctx.lineTo(0, core.height / 2);
+            ctx.lineTo(-core.width / 2, core.height / 4);
+            ctx.lineTo(-core.width / 2, -core.height / 4);
+            ctx.closePath();
+            if (core.active) {
+                const pulse = this.revealFlash > 0 && Math.floor(this.revealFlash / 4) % 2 === 0;
+                ctx.fillStyle = pulse ? '#ffffff' : core.color;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = Math.sin(this.timer * 0.25) > 0 ? '#ffffff' : '#f43f5e';
+                ctx.beginPath();
+                ctx.arc(0, 0, 9, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (core.hidden) {
+                ctx.fillStyle = '#475569';
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 2;
+                ctx.fill();
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(-core.width / 2, -core.height / 4);
+                ctx.lineTo(core.width / 2, core.height / 4);
+                ctx.moveTo(core.width / 2, -core.height / 4);
+                ctx.lineTo(-core.width / 2, core.height / 4);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            ctx.restore();
+        }
+    }
+
+
+    // ---------------------------------------------------------------
+    // アームボス(ボス3): bossLevel % 3 === 2 のとき登場(ステージ3, 6, 9...)
+    //  本体は通常無敵(腕が守っている)。一定間隔で、肩から腕を斜め下へ飛ばし、画面を横切って画面外まで抜ける。
+    //  腕を出した瞬間に無敵が解除され、一定時間だけ本体が露出する。腕は自機を狙わず、ボスの前をX字に横切って守る。
+    //  腕に触れると被弾し、腕は自機の弾を受け止める。時間切れで腕が戻り、本体は再び無敵になる。
+    //  本体の攻撃: 予告つきレーザー / 自機を狙う巨大な弾(分裂時にもう一度自機を狙う)
+    // ---------------------------------------------------------------
+    const ARM_DOCK_FRAMES_BASE = 270;      // 腕が肩に戻っている(無敵の)時間。レベルで短縮
+    const ARM_DOCK_FRAMES_MIN = 150;
+    const ARM_FIRST_DOCK_FRAMES = 150;     // 登場後、最初に腕を出すまで
+    const ARM_TELEGRAPH_FRAMES = 45;       // 腕を出す前の予告(飛ぶ線が出る)
+    const ARM_BOSS_EXPOSE_FRAMES = 360;    // 腕を出してから、本体が露出している時間(約6秒)
+    const ARM_RETURN_FRAMES = 30;          // 露出が終わって、腕が肩に戻るまで
+    const ARM_SWEEP_SPEED_BASE = 8.5;      // 腕の速さ(レベルごとに+0.35、最大12)
+    const ARM_SWEEP_ANGLES_DEG = [38, 58, 28];   // 水平から下向きの角度。1回目・2回目・3回目の波
+    const ARM_WAVE_GAP_FRAMES = 50;        // 波と波の間隔
+    const ARM_LENGTH = 96;                 // 腕の長さ
+    const ARM_RADIUS = 20;                 // 腕の太さ(当たり判定の半径)
+    const ARM_SHOULDER_DX = 110;           // 肩の位置(本体の中心から左右)。腕はここから本体の前(下)でX字に交差する
+    const ARM_SHOULDER_DY = -10;
+    const ARM_BOSS_LASER_TELEGRAPH = 55;   // レーザーの予告時間(最後の22フレームは向きが固定される)
+    const ARM_BOSS_LASER_FIRE = 22;
+    const ARM_BOSS_LASER_SPREAD = 0.34;    // レーザーが複数のときの角度間隔
+    const ARM_BOSS_LASER_HALF_WIDTH = 12;
+    const ARM_BOSS_BIG_RADIUS = 15;        // 巨大弾の大きさ
+    const ARM_BOSS_BIG_SPEED = 3.0;
+    const ARM_BOSS_BIG_SPLIT_FRAMES = 55;  // 巨大弾が分裂するまでの時間
+    const ARM_BOSS_BIG_FAN_SPREAD = 0.26;
+
+    class ArmBoss extends Boss {
+        constructor(level = 0) {
+            super(level);
+            this.targetY = 70;
+            this.phase = 'docked';          // docked → telegraph → exposed → returning → docked …
+            this.phaseTimer = ARM_FIRST_DOCK_FRAMES;
+            this.exposeTimer = 0;
+            this.revealFlash = 0;
+            this.arms = [];                 // 飛んでいる腕
+            this.wavesLeft = 0;
+            this.waveIndex = 0;
+            this.waveTimer = 0;
+            this.laser = { state: 'idle', timer: 200, angle: Math.PI / 2, count: 1, hit: false };
+            this.bigTimer = 140;
+            this.bigShots = [];
+
+            const bodyHp = bossHp(200 + level * 90, level);
+            // 本体だけがダメージを受ける。腕は攻撃対象ではない。通常は active=false(無敵)。
+            this.parts = [
+                { id: 'body', name: '本体', relX: 0, relY: 0, width: 86, height: 72, maxHp: bodyHp, hp: bodyHp, active: false, hidden: true, color: '#a78bfa' }
+            ];
+            this.maxHp = bodyHp;
+        }
+
+        get currentHp() {
+            const body = this.parts[0];
+            return (body.active || body.hidden) ? Math.max(0, body.hp) : 0;
+        }
+
+        waveCount() {
+            return 1 + (this.level >= 3 ? 1 : 0) + (this.level >= 6 ? 1 : 0);
+        }
+
+        shoulder(side) {
+            return { x: this.x + side * ARM_SHOULDER_DX, y: this.y + ARM_SHOULDER_DY };
+        }
+
+        // 左肩の腕は右下へ、右肩の腕は左下へ飛ぶ(ボスの前でX字に交差する)
+        launchWave(k) {
+            const ang = ARM_SWEEP_ANGLES_DEG[k] * Math.PI / 180;
+            const speed = Math.min(12, ARM_SWEEP_SPEED_BASE + this.level * 0.35);
+            for (const side of [-1, 1]) {
+                const sh = this.shoulder(side);
+                this.arms.push({
+                    x: sh.x, y: sh.y,
+                    vx: -side * Math.cos(ang) * speed,
+                    vy: Math.sin(ang) * speed,
+                    hitCooldown: 0
+                });
+            }
+            createExplosion(this.x, this.y + 4, '#38bdf8', 12);
+            sfx.playExplosion(false);
+        }
+
+        // 腕(カプセル)の両端
+        armEnds(arm) {
+            const sp = Math.hypot(arm.vx, arm.vy) || 1;
+            const dx = arm.vx / sp * ARM_LENGTH / 2;
+            const dy = arm.vy / sp * ARM_LENGTH / 2;
+            return { x1: arm.x - dx, y1: arm.y - dy, x2: arm.x + dx, y2: arm.y + dy };
+        }
+
+        updateArmPieces() {
+            const pcx = player.x + player.width / 2;
+            const pcy = player.y + player.height / 2;
+            for (let i = this.arms.length - 1; i >= 0; i--) {
+                const arm = this.arms[i];
+                arm.x += arm.vx;
+                arm.y += arm.vy;
+                if (arm.hitCooldown > 0) arm.hitCooldown--;
+                if (arm.x < -160 || arm.x > GAME_WIDTH + 160 || arm.y > GAME_HEIGHT + 160) {
+                    this.arms.splice(i, 1);   // 画面外へ抜けた
+                    continue;
+                }
+
+                const e = this.armEnds(arm);
+
+                // 腕に触れると被弾
+                const rp = ARM_RADIUS + 10;
+                if (arm.hitCooldown <= 0 && distToSegmentSq(pcx, pcy, e.x1, e.y1, e.x2, e.y2) <= rp * rp) {
+                    player.hit();
+                    arm.hitCooldown = 30;
+                }
+
+                // 腕は自機の弾を受け止める(ボスを守る)
+                for (const b of playerBulletPool) {
+                    if (!b.active) continue;
+                    const rb = ARM_RADIUS + b.radius;
+                    if (distToSegmentSq(b.x, b.y, e.x1, e.y1, e.x2, e.y2) <= rb * rb) b.active = false;
+                }
+            }
+        }
+
+        laserAngles() {
+            const L = this.laser;
+            const out = [];
+            for (let i = 0; i < L.count; i++) out.push(L.angle + (i - (L.count - 1) / 2) * ARM_BOSS_LASER_SPREAD);
+            return out;
+        }
+
+        updateLaser() {
+            const L = this.laser;
+            const ox = this.x;
+            const oy = this.y + 34;
+            if (L.state === 'idle') {
+                L.timer--;
+                if (L.timer <= 0) {
+                    L.state = 'telegraph';
+                    L.timer = ARM_BOSS_LASER_TELEGRAPH;
+                    L.hit = false;
+                    L.count = 1 + 2 * Math.min(2, Math.floor(this.level / 3));
+                    L.angle = Math.atan2(player.y - oy, player.x - ox);
+                    sfx.playWarning();
+                }
+            } else if (L.state === 'telegraph') {
+                L.timer--;
+                if (L.timer > 22) L.angle = Math.atan2(player.y - oy, player.x - ox);   // 最後の22フレームは向きを固定
+                if (L.timer <= 0) { L.state = 'fire'; L.timer = ARM_BOSS_LASER_FIRE; }
+            } else {
+                L.timer--;
+                if (!L.hit) {
+                    const pcx = player.x + player.width / 2;
+                    const pcy = player.y + player.height / 2;
+                    const r = ARM_BOSS_LASER_HALF_WIDTH + 8;
+                    for (const a of this.laserAngles()) {
+                        if (distToSegmentSq(pcx, pcy, ox, oy, ox + Math.cos(a) * 1100, oy + Math.sin(a) * 1100) <= r * r) {
+                            player.hit();
+                            L.hit = true;
+                            break;
+                        }
+                    }
+                }
+                if (L.timer <= 0) {
+                    L.state = 'idle';
+                    L.timer = Math.max(150, 300 - this.level * 15) + Math.floor(Math.random() * 60);
+                }
+            }
+        }
+
+        updateBigShot() {
+            const level = this.level;
+            this.bigTimer--;
+            if (this.bigTimer <= 0) {
+                this.bigTimer = Math.max(120, 210 - level * 10) + Math.floor(Math.random() * 50);
+                const ox = this.x;
+                const oy = this.y + 36;
+                const a = Math.atan2(player.y - oy, player.x - ox);
+                const bullet = spawnFromPool(enemyBulletPool, b => b.spawn(
+                    ox, oy, Math.cos(a) * ARM_BOSS_BIG_SPEED, Math.sin(a) * ARM_BOSS_BIG_SPEED,
+                    '#f0abfc', ARM_BOSS_BIG_RADIUS, false, 0
+                ));
+                if (bullet) this.bigShots.push({ bullet, timer: ARM_BOSS_BIG_SPLIT_FRAMES });
+            }
+
+            for (let i = this.bigShots.length - 1; i >= 0; i--) {
+                const shot = this.bigShots[i];
+                shot.timer--;
+                // 当たる・消されるなどで巨大弾でなくなっていたら、分裂しない
+                if (!shot.bullet.active || shot.bullet.radius < ARM_BOSS_BIG_RADIUS - 1) {
+                    this.bigShots.splice(i, 1);
+                    continue;
+                }
+                if (shot.timer <= 0) {
+                    const bx = shot.bullet.x;
+                    const by = shot.bullet.y;
+                    shot.bullet.active = false;
+                    // 分裂するときに、もう一度自機を狙う
+                    const n = 7 + 2 * Math.min(3, Math.floor(level / 2));
+                    bossFireFan(bx, by, Math.atan2(player.y - by, player.x - bx), n, ARM_BOSS_BIG_FAN_SPREAD, 4.3, '#e879f9', 4);
+                    createExplosion(bx, by, '#e879f9', 10);
+                    this.bigShots.splice(i, 1);
+                }
+            }
+        }
+
+        update() {
+            this.timer++;
+
+            if (this.y < this.targetY) {
+                this.y += 1.5;
+                this.isInvulnerable = true;
+                return;
+            }
+            this.isInvulnerable = false;
+            if (this.revealFlash > 0) this.revealFlash--;
+
+            this.swayPhase += 0.015;
+            this.x = GAME_WIDTH / 2 + Math.sin(this.swayPhase) * 130;
+            this.y = this.targetY;
+
+            const body = this.parts[0];
+
+            if (this.phase === 'docked') {
+                this.phaseTimer--;
+                if (this.phaseTimer <= 0) {
+                    this.phase = 'telegraph';
+                    this.phaseTimer = ARM_TELEGRAPH_FRAMES;
+                    sfx.playWarning();
+                }
+            } else if (this.phase === 'telegraph') {
+                this.phaseTimer--;
+                if (this.phaseTimer <= 0) {
+                    // 腕を出した瞬間に、無敵が解除される
+                    this.phase = 'exposed';
+                    this.exposeTimer = ARM_BOSS_EXPOSE_FRAMES;
+                    body.active = true;
+                    body.hidden = false;
+                    this.revealFlash = 40;
+                    this.wavesLeft = this.waveCount();
+                    this.waveIndex = 0;
+                    this.waveTimer = 0;
+                }
+            } else if (this.phase === 'exposed') {
+                this.exposeTimer--;
+                if (this.wavesLeft > 0) {
+                    this.waveTimer--;
+                    if (this.waveTimer <= 0) {
+                        this.launchWave(this.waveIndex++);
+                        this.wavesLeft--;
+                        this.waveTimer = ARM_WAVE_GAP_FRAMES;
+                    }
+                }
+                if (this.exposeTimer <= 0 && body.hp > 0) {
+                    // 時間切れ: 本体は再び無敵になり、腕が戻ってくる
+                    body.active = false;
+                    body.hidden = true;
+                    this.arms.length = 0;
+                    this.phase = 'returning';
+                    this.phaseTimer = ARM_RETURN_FRAMES;
+                    sfx.playWarning();
+                }
+            } else if (this.phase === 'returning') {
+                this.phaseTimer--;
+                if (this.phaseTimer <= 0) {
+                    this.phase = 'docked';
+                    this.phaseTimer = Math.max(ARM_DOCK_FRAMES_MIN, ARM_DOCK_FRAMES_BASE - this.level * 12);
+                    createExplosion(this.x, this.y, '#38bdf8', 14);
+                }
+            }
+
+            this.updateArmPieces();
+            this.updateLaser();
+            this.updateBigShot();
+        }
+
+        // 腕を描く(中心(x,y)、向きang。拳が進行方向の先頭)
+        drawArmShape(x, y, ang, glow) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(ang);
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = glow ? 14 : 6;
+            ctx.fillStyle = '#334155';
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 2;
+            ctx.fillRect(-ARM_LENGTH / 2, -11, ARM_LENGTH * 0.62, 22);
+            ctx.strokeRect(-ARM_LENGTH / 2, -11, ARM_LENGTH * 0.62, 22);
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 3;
+            ctx.fillRect(ARM_LENGTH * 0.12 - 4, -ARM_RADIUS, 36, ARM_RADIUS * 2);
+            ctx.strokeRect(ARM_LENGTH * 0.12 - 4, -ARM_RADIUS, 36, ARM_RADIUS * 2);
+            ctx.fillStyle = '#38bdf8';
+            for (let k = -1; k <= 1; k++) {
+                ctx.beginPath();
+                ctx.moveTo(ARM_LENGTH * 0.12 + 32, k * 12 - 5);
+                ctx.lineTo(ARM_LENGTH * 0.12 + 46, k * 12);
+                ctx.lineTo(ARM_LENGTH * 0.12 + 32, k * 12 + 5);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        draw() {
+            const exposed = this.phase === 'exposed';
+            const body = this.parts[0];
+
+            // ---- 本体 ----
+            ctx.save();
+            ctx.translate(this.x, this.y);
+
+            if (this.isInvulnerable || !exposed) {
+                ctx.save();
+                ctx.strokeStyle = this.isInvulnerable ? `rgba(255,255,255,${0.35 + Math.sin(this.timer * 0.3) * 0.2})` : 'rgba(103,232,249,0.55)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, 66 + Math.sin(this.timer * 0.18) * 4, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            ctx.fillStyle = '#1e1b4b';
+            ctx.strokeStyle = exposed ? '#ffffff' : '#7c3aed';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, -44);
+            ctx.lineTo(48, -22);
+            ctx.lineTo(48, 22);
+            ctx.lineTo(0, 44);
+            ctx.lineTo(-48, 22);
+            ctx.lineTo(-48, -22);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            const flash = this.revealFlash > 0 && Math.floor(this.revealFlash / 4) % 2 === 0;
+            ctx.fillStyle = exposed ? (flash ? '#ffffff' : '#f472b6') : '#4c1d95';
+            ctx.beginPath();
+            ctx.arc(0, 0, exposed ? 17 + Math.sin(this.timer * 0.3) * 2 : 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(0, 0, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (exposed) {
+                // 露出の残り時間
+                ctx.strokeStyle = '#f472b6';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(0, 0, 58, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, this.exposeTimer) / ARM_BOSS_EXPOSE_FRAMES);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // ---- レーザー(世界座標) ----
+            const L = this.laser;
+            if (L.state !== 'idle') {
+                const ox = this.x;
+                const oy = this.y + 34;
+                ctx.save();
+                ctx.lineCap = 'round';
+                for (const a of this.laserAngles()) {
+                    const ex = ox + Math.cos(a) * 1100;
+                    const ey = oy + Math.sin(a) * 1100;
+                    ctx.beginPath();
+                    ctx.moveTo(ox, oy);
+                    ctx.lineTo(ex, ey);
+                    if (L.state === 'telegraph') {
+                        const locked = L.timer <= 22;
+                        ctx.strokeStyle = (Math.floor(L.timer / 3) % 2 === 0 || locked) ? 'rgba(255,60,60,0.75)' : 'rgba(255,60,60,0.25)';
+                        ctx.lineWidth = locked ? 3 : 2;
+                        ctx.stroke();
+                    } else {
+                        ctx.shadowColor = '#f43f5e';
+                        ctx.shadowBlur = 16;
+                        ctx.strokeStyle = 'rgba(244,63,94,0.9)';
+                        ctx.lineWidth = ARM_BOSS_LASER_HALF_WIDTH * 2;
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 5;
+                        ctx.stroke();
+                    }
+                }
+                ctx.restore();
+            }
+
+            // ---- 肩に付いている腕 / 戻ってくる腕 / 飛び出す前の予告 ----
+            const waveAngles = ARM_SWEEP_ANGLES_DEG.slice(0, this.waveCount());
+            if (this.phase === 'docked' || this.phase === 'telegraph' || this.phase === 'returning') {
+                const a0 = ARM_SWEEP_ANGLES_DEG[0] * Math.PI / 180;
+                const t = this.phase === 'returning' ? 1 - this.phaseTimer / ARM_RETURN_FRAMES : 1;   // 戻りの進み具合
+                for (const side of [-1, 1]) {
+                    const sh = this.shoulder(side);
+                    let x = sh.x;
+                    let y = sh.y;
+                    if (this.phase === 'returning') {
+                        x += side * 90 * (1 - t);
+                        y -= 150 * (1 - t);
+                    } else if (this.phase === 'telegraph') {
+                        x += (Math.random() - 0.5) * 3;   // 飛ぶ前に震える
+                        y += (Math.random() - 0.5) * 3;
+                    }
+                    const ang = Math.atan2(Math.sin(a0), -side * Math.cos(a0));
+                    this.drawArmShape(x, y, ang, this.phase === 'telegraph');
+
+                    if (this.phase === 'telegraph') {
+                        // 飛ぶ線(予告)
+                        ctx.save();
+                        const blink = Math.floor(this.phaseTimer / 3) % 2 === 0;
+                        ctx.strokeStyle = blink ? 'rgba(255,60,60,0.55)' : 'rgba(255,60,60,0.2)';
+                        ctx.lineWidth = ARM_RADIUS * 2;
+                        ctx.lineCap = 'butt';
+                        for (const deg of waveAngles) {
+                            const r = deg * Math.PI / 180;
+                            ctx.beginPath();
+                            ctx.moveTo(sh.x, sh.y);
+                            ctx.lineTo(sh.x - side * Math.cos(r) * 1400, sh.y + Math.sin(r) * 1400);
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+                    }
+                }
+            }
+
+            // ---- 飛んでいる腕 ----
+            for (const arm of this.arms) {
+                this.drawArmShape(arm.x, arm.y, Math.atan2(arm.vy, arm.vx), true);
+            }
         }
     }
 
@@ -2815,8 +3698,10 @@ const ELECTRO_CHAIN_RANGE = 120;
 
     // パッシブスキルを1枠だけ出す
     if (Math.random() < PASSIVE_OFFER_CHANCE) {
+        const ownedPassiveCount = getOwnedPassiveCount();
         const availablePassives = Object.keys(PASSIVE_DEFS)
-            .filter(id => passiveLevels[id] < PASSIVE_DEFS[id].maxLevel);
+            .filter(id => passiveLevels[id] < PASSIVE_DEFS[id].maxLevel)
+            .filter(id => passiveLevels[id] > 0 || ownedPassiveCount < MAX_PASSIVES);
 
         if (availablePassives.length > 0) {
             const replaceIndex = pickReplaceIndex();
@@ -2841,7 +3726,9 @@ function configureUpgradeSlot(slotIndex, type) {
 
         slot.icon.innerText = weapon.icon;
         slot.title.innerText = weapon.title;
-        slot.desc.innerText = weapon.desc;
+        slot.desc.innerText = weaponId === 'drill'
+            ? `Lv.${weaponLevels.drill || 1}→Lv.${(weaponLevels.drill || 1) + 1}：${({2:'威力倍率1.8倍に上昇',3:'同じ敵への連続ヒット間隔を6→4フレームに短縮',4:'威力倍率2.2倍に上昇',5:'威力倍率2.6倍。弾サイズと持続時間も強化'})[(weaponLevels.drill || 1) + 1] || 'ドリルを強化'}`
+            : weapon.desc;
         slot.badge.innerText = ownedWeapons.includes(weaponId)
             ? `WEAPON LV.${weaponLevels[weaponId] || 1}→${(weaponLevels[weaponId] || 1) + 1}`
             : `WEAPON ${ownedWeapons.length + 1}/${MAX_WEAPONS}`;
@@ -2858,8 +3745,8 @@ function configureUpgradeSlot(slotIndex, type) {
         slot.title.innerText = def.title;
         slot.desc.innerText = def.desc();
         slot.badge.innerText = def.maxLevel > 1
-            ? `PASSIVE LV.${passiveLevels[id]}/${def.maxLevel}`
-            : 'PASSIVE';
+            ? `PASSIVE ${getOwnedPassiveCount()}/${MAX_PASSIVES} · LV.${passiveLevels[id]}/${def.maxLevel}`
+            : `PASSIVE ${getOwnedPassiveCount()}/${MAX_PASSIVES}`;
         slot.status.innerText = '取得する';
 
         return;
@@ -2980,7 +3867,8 @@ function selectUpgradeSlot(slotIndex) {
         }
     } else if (type.startsWith('passive:')) {
         const id = type.substring(8);
-        if (PASSIVE_DEFS[id] && passiveLevels[id] < PASSIVE_DEFS[id].maxLevel) {
+        if (PASSIVE_DEFS[id] && passiveLevels[id] < PASSIVE_DEFS[id].maxLevel &&
+            (passiveLevels[id] > 0 || getOwnedPassiveCount() < MAX_PASSIVES)) {
             passiveLevels[id]++;
             if (id === 'glassCannon') player.lives = 1;
             if (id === 'shield') {
@@ -3080,7 +3968,7 @@ function startGame() {
             weaponTimers.homing = 0;
             homingBurstRemaining = 0;
             homingShotTimer = 0;
-            wiperX = WIPER_X_MIN;
+            wiperT = 0;
     weaponTimers.electro = 0;
     weaponTimers.homing = 0;
     homingBurstRemaining = 0;
@@ -3102,7 +3990,7 @@ function startGame() {
     orbitAngle = 0;
     droneMode = 0;
     weaponTimers.machinegun = weaponTimers.drone = 0;
-    mgBurst = MG_BURST_FRAMES;
+    mgBurst = getMachinegunBurstFrames();
     mgRest = 0;
     blastRings.length = 0;
     momentumValue = 0;
@@ -3156,10 +4044,71 @@ function startGame() {
     }
 
 
+    // PAUSE中に所持中の武器・パッシブを一覧表示。アイコンにホバー/フォーカスすると説明を表示する。
+    function renderPauseInventory() {
+        const makeItem = (icon, name, description, levelText = '') => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'pause-item';
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'pause-item-button';
+            button.setAttribute('aria-label', `${name}: ${description}`);
+            button.title = `${name}: ${description}`; // タッチ端末などでも標準ツールチップを利用
+            const iconEl = document.createElement('span');
+            iconEl.className = 'pause-item-icon';
+            iconEl.textContent = icon || '❔';
+            button.appendChild(iconEl);
+            const nameEl = document.createElement('span');
+            nameEl.className = 'pause-item-name';
+            nameEl.textContent = name;
+            button.appendChild(nameEl);
+            if (levelText) {
+                const levelEl = document.createElement('span');
+                levelEl.className = 'pause-item-level';
+                levelEl.textContent = levelText;
+                button.appendChild(levelEl);
+            }
+            const tooltip = document.createElement('span');
+            tooltip.className = 'pause-tooltip';
+            const tooltipTitle = document.createElement('strong');
+            tooltipTitle.textContent = name + (levelText ? ` ${levelText}` : '');
+            const tooltipDesc = document.createElement('span');
+            tooltipDesc.textContent = description;
+            tooltip.append(tooltipTitle, document.createElement('br'), tooltipDesc);
+            wrapper.append(button, tooltip);
+            return wrapper;
+        };
+
+        ui.pauseWeapons.replaceChildren();
+        ui.pausePassives.replaceChildren();
+        let total = 0;
+        for (const id of ownedWeapons) {
+            const def = WEAPON_DEFS[id];
+            if (!def) continue;
+            const level = weaponLevels[id] || 1;
+            ui.pauseWeapons.appendChild(makeItem(def.icon, def.title || def.name, def.desc || '説明はありません。', `Lv${level}`));
+            total++;
+        }
+        for (const [id, level] of Object.entries(passiveLevels)) {
+            if (level <= 0) continue;
+            const def = PASSIVE_DEFS[id];
+            if (!def) continue;
+            const description = typeof def.desc === 'function' ? def.desc() : (def.desc || '説明はありません。');
+            ui.pausePassives.appendChild(makeItem(def.icon, def.title, description, `Lv${level}`));
+            total++;
+        }
+        ui.pauseInventoryEmpty.classList.toggle('hidden', total > 0);
+        ui.pauseWeaponsHeading.classList.toggle('hidden', ownedWeapons.length === 0);
+        ui.pauseWeapons.classList.toggle('hidden', ownedWeapons.length === 0);
+        ui.pausePassivesHeading.classList.toggle('hidden', getOwnedPassiveCount() === 0);
+        ui.pausePassives.classList.toggle('hidden', getOwnedPassiveCount() === 0);
+    }
+
     function setPaused(paused) {
         if (paused) {
             if (gameState !== STATE_PLAYING) return;
             gameState = STATE_PAUSED;
+            renderPauseInventory();
             ui.pauseScreen.classList.remove('hidden');
             ui.pauseButton.textContent = 'RESUME';
         } else {
@@ -3229,7 +4178,7 @@ function startGame() {
         }
 
         // 取得中のパッシブ表示(キルラッシュ発動中/シールド状態も反映)
-        let passiveText = '';
+        let passiveText = `P${getOwnedPassiveCount()}/${MAX_PASSIVES} `;
         for (const id of Object.keys(PASSIVE_DEFS)) {
             const lv = passiveLevels[id];
             if (lv <= 0) continue;
@@ -3302,13 +4251,15 @@ function startGame() {
                 const enemy = enemies[j];
                 if (!enemy.active) continue;
 
-                if (isPierce && bullet.hitSet.has(enemy)) continue;
+                if (bulletType === 'blade' && bullet.hitSet.has(enemy)) continue;
+                if (bulletType === 'drill' && (bullet.hitCooldowns.get(enemy) || 0) > 0) continue;
                 if (bullet.ignoreTarget === enemy) continue;
 
                 if (bulletRight > enemy.x && bulletLeft < enemy.x + enemy.width &&
                     bulletBottom > enemy.y && bulletTop < enemy.y + enemy.height) {
                     
                     if (!isPierce) bullet.active = false;
+                    else if (bulletType === 'drill') bullet.hitCooldowns.set(enemy, drillHitCooldownFrames());
                     else bullet.hitSet.add(enemy);
 
                     const critChance = critBaseChance + critLevel * 0.05 * ((bullet.critChanceMultiplier || 1) - 1);
@@ -3341,7 +4292,8 @@ function startGame() {
                     const part = boss.parts[j];
                     if (!part.active) continue;
 
-                    if (isPierce && bullet.hitSet.has(part)) continue;
+                    if (bulletType === 'blade' && bullet.hitSet.has(part)) continue;
+                    if (bulletType === 'drill' && (bullet.hitCooldowns.get(part) || 0) > 0) continue;
 
                     const partX = boss.x + part.relX - part.width / 2;
                     const partY = boss.y + part.relY - part.height / 2;
@@ -3349,6 +4301,7 @@ function startGame() {
                         bulletBottom > partY && bulletTop < partY + part.height) {
                         
                         if (!isPierce) bullet.active = false;
+                        else if (bulletType === 'drill') bullet.hitCooldowns.set(part, drillHitCooldownFrames());
                         else bullet.hitSet.add(part);
 
                         const critChance = critBaseChance + critLevel * 0.05 * ((bullet.critChanceMultiplier || 1) - 1);
@@ -3435,7 +4388,7 @@ function startGame() {
         for (let i = 0; i < SPLIT_COUNT; i++) {
             const a = Math.random() * Math.PI * 2;
             spawnFromPool(playerBulletPool, b => {
-                b.spawn(x, y, Math.cos(a) * SPLIT_SPEED, Math.sin(a) * SPLIT_SPEED, '#fef08a', 2, false, 0, 'normal', SPLIT_LIFE, 4, 4, 1, 1);
+                b.spawn(x, y, Math.cos(a) * SPLIT_SPEED, Math.sin(a) * SPLIT_SPEED, '#fef08a', 4, false, 0, 'normal', SPLIT_LIFE, 8, 8, 1, 1);
                 b.dmgMult = dm;
                 b.noSplit = true;
                 b.ignoreTarget = target;
@@ -3530,7 +4483,13 @@ function startGame() {
 
                 const fireDrill = (x) => {
                     spawnFromPool(playerBulletPool, b => {
-                        b.spawn(x, y, 0, -9, '#00f0ff', 10, false, 0, 'drill', 120, 22, 38, 1, 1);
+                        const level = weaponLevels.drill || 1;
+                        const maxLevel = level >= 5;
+                        const damageMultiplier = DRILL_DAMAGE_MULTIPLIERS[level] || WEAPON_DEFS.drill.baseDamageMultiplier;
+                        // Lv.5ではドリルを大型化し、画面内に長く残るようにする。
+                        b.spawn(x, y, 0, -4.5, '#00f0ff', 10, false, 0, 'drill', maxLevel ? 240 : 180,
+                            maxLevel ? 28 : 22, maxLevel ? 46 : 38, 1, 1);
+                        b.dmgMult = damageMultiplier;
                     });
                 };
 
@@ -3540,16 +4499,14 @@ function startGame() {
             }
         }
 
-        // ELECTRO: 最寄りの敵から最大4体へ一度だけ連鎖。
-        // electricLinksには今回の1イベントの命中済み敵を記録し、A→B→Aを防ぐ。
+        // ELECTRO: レベルに応じて複数方向へ分岐する連鎖電撃。
+        // Lv.2で2方向、Lv.4で3方向。Lv.3 / Lv.5では最大命中数が増える。
         if (hasWeapon('electro')) {
             if (weaponTimers.electro > 0) {
                 weaponTimers.electro--;
             } else {
                 const cx = player.x + player.width * 0.5;
                 const cy = player.y + player.height * 0.5;
-                // 射程内で最も近い敵を1回の走査で探す。
-                // 以前の filter → sort は毎回配列を作っていたため、敵数が多いほど無駄が増えていた。
                 let first = null;
                 let firstD2 = ELECTRO_RANGE * ELECTRO_RANGE;
                 for (const enemy of enemies) {
@@ -3564,44 +4521,63 @@ function startGame() {
                 }
 
                 if (first) {
+                    const level = weaponLevels.electro || 1;
+                    const maxChain = 4 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0);
+                    const branchCount = level >= 4 ? 3 : (level >= 2 ? 2 : 1);
                     const chain = [first];
-                    const maxChain = 4;
+                    const visited = new Set(chain);
+                    const links = [];
                     const chainRange2 = ELECTRO_CHAIN_RANGE * ELECTRO_CHAIN_RANGE;
                     const electroRange2 = ELECTRO_RANGE * ELECTRO_RANGE;
-
-                    while (chain.length < maxChain) {
-                        const last = chain[chain.length - 1];
-                        const lx = last.x + last.width * 0.5;
-                        const ly = last.y + last.height * 0.5;
-                        let best = null;
-                        let bestD2 = chainRange2;
-
-                        for (const candidate of enemies) {
-                            if (!candidate.active || chain.includes(candidate)) continue;
-                            // 連鎖先も、自機から射程(ELECTRO_RANGE)内の敵に限る(最適化前の挙動)
-                            const pdx = candidate.x + candidate.width * 0.5 - cx;
-                            const pdy = candidate.y + candidate.height * 0.5 - cy;
-                            if (pdx * pdx + pdy * pdy > electroRange2) continue;
-                            const dx = candidate.x + candidate.width * 0.5 - lx;
-                            const dy = candidate.y + candidate.height * 0.5 - ly;
-                            const d2 = dx * dx + dy * dy;
-                            if (d2 < bestD2) {
-                                bestD2 = d2;
-                                best = candidate;
+                    // 幅優先で各命中先から分岐。敵の重複ヒット・無限ループを防ぐ。
+                    for (let parentIndex = 0; parentIndex < chain.length && chain.length < maxChain; parentIndex++) {
+                        const parent = chain[parentIndex];
+                        const px = parent.x + parent.width * 0.5;
+                        const py = parent.y + parent.height * 0.5;
+                        for (let branch = 0; branch < branchCount && chain.length < maxChain; branch++) {
+                            let best = null;
+                            let bestD2 = chainRange2;
+                            for (const candidate of enemies) {
+                                if (!candidate.active || visited.has(candidate)) continue;
+                                const ex = candidate.x + candidate.width * 0.5;
+                                const ey = candidate.y + candidate.height * 0.5;
+                                const pdx = ex - cx;
+                                const pdy = ey - cy;
+                                if (pdx * pdx + pdy * pdy > electroRange2) continue;
+                                const dx = ex - px;
+                                const dy = ey - py;
+                                const d2 = dx * dx + dy * dy;
+                                if (d2 < bestD2) {
+                                    bestD2 = d2;
+                                    best = candidate;
+                                }
                             }
+                            if (!best) break;
+                            visited.add(best);
+                            chain.push(best);
+                            links.push({
+                                x1: px, y1: py,
+                                x2: best.x + best.width * 0.5,
+                                y2: best.y + best.height * 0.5,
+                                life: 10
+                            });
                         }
-                        if (!best) break;
-                        chain.push(best);
                     }
 
                     electricLinks.length = 0;
-                    for (let i = 0; i < chain.length; i++) {
-                        const enemy = chain[i];
-                        if (!enemy.active) continue;
-                        enemy.hp -= shotPowerLevel * 1.5 * getLowHpPowerMultiplier();
-                        createDamageText(enemy.x + enemy.width * 0.5, enemy.y, Math.round(shotPowerLevel * 1.5 * getLowHpPowerMultiplier()), '#c084fc', false);
-                        createExplosion(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.5, '#a855f7', 5);
+                    electricLinks.push({
+                        x1: cx, y1: cy,
+                        x2: first.x + first.width * 0.5,
+                        y2: first.y + first.height * 0.5,
+                        life: 10
+                    }, ...links);
 
+                    const damage = shotPowerLevel * 1.5 * getLowHpPowerMultiplier();
+                    for (const enemy of chain) {
+                        if (!enemy.active) continue;
+                        enemy.hp -= damage;
+                        createDamageText(enemy.x + enemy.width * 0.5, enemy.y, Math.round(damage), '#c084fc', false);
+                        createExplosion(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.5, '#a855f7', 5);
                         if (enemy.hp <= 0) {
                             enemy.active = false;
                             onEnemyKilled();
@@ -3609,80 +4585,63 @@ function startGame() {
                             sfx.playExplosion(false);
                             createExplosion(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.5, enemy.color, 12);
                         }
-
-                        if (i > 0) {
-                            const prev = chain[i - 1];
-                            electricLinks.push({
-                                x1: prev.x + prev.width * 0.5,
-                                y1: prev.y + prev.height * 0.5,
-                                x2: enemy.x + enemy.width * 0.5,
-                                y2: enemy.y + enemy.height * 0.5,
-                                life: 10
-                            });
-                        }
                     }
-                    electricLinks.unshift({
-                        x1: cx, y1: cy,
-                        x2: first.x + first.width * 0.5,
-                        y2: first.y + first.height * 0.5,
-                        life: 10
-                    });
                     weaponTimers.electro = weaponCooldown('electro');
                 }
             }
         }
 
-        // WIPER: 左から右へ一定速度で移動する縦棒
+        // WIPER: 縦棒が左右に動く。Lv.3から2本、Lv.5で3本。同じ敵へは、本数によらず WIPER_HIT_INTERVAL フレームに1回。
         if (hasWeapon('wiper')) {
-            wiperX += WIPER_SPEED;
-            if (wiperX > WIPER_X_MAX) {
-                wiperX = WIPER_X_MIN;
-            }
+            wiperT += WIPER_SPEED / (2 * getWiperHalfRange());
+            if (wiperT >= 1) wiperT -= 1;
 
             const cx = player.x + player.width * 0.5;
-            const cy = player.y + player.height * 0.5;
-            const barX = cx + wiperX;
-            const topY = player.y - WIPER_REACH;
+            const topY = player.y - getWiperReach();
             const bottomY = player.y + 4;
 
-            for (const enemy of enemies) {
-                if (!enemy.active) continue;
+            for (const offset of getWiperBarOffsets()) {
+                const barX = cx + offset;
 
-                const ex = enemy.x + enemy.width * 0.5;
-                const ey = enemy.y + enemy.height * 0.5;
+                for (const enemy of enemies) {
+                    if (!enemy.active) continue;
 
-                if (
-                    Math.abs(ex - barX) <= enemy.width * 0.5 + 6 &&
-                    ey >= topY - enemy.height * 0.5 &&
-                    ey <= bottomY + enemy.height * 0.5
-                ) {
-                    const last = wiperHitTimers.get(enemy) || 0;
-                    if (last <= 0) {
-                        const dmg = Math.max(1, Math.round(shotPowerLevel * 0.7 * getLowHpPowerMultiplier()));
-                        enemy.hp -= dmg;
-                        wiperHitTimers.set(enemy, 8);
-                        createDamageText(ex, ey, dmg, '#86efac', false);
+                    const ex = enemy.x + enemy.width * 0.5;
+                    const ey = enemy.y + enemy.height * 0.5;
 
-                        if (enemy.hp <= 0) {
-                            enemy.active = false;
-                            onEnemyKilled();
-                            score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
-                            createExplosion(ex, ey, enemy.color, 10);
+                    if (
+                        Math.abs(ex - barX) <= enemy.width * 0.5 + 6 &&
+                        ey >= topY - enemy.height * 0.5 &&
+                        ey <= bottomY + enemy.height * 0.5
+                    ) {
+                        const last = wiperHitTimers.get(enemy) || 0;
+                        if (last <= 0) {
+                            const dmg = shotPowerLevel * getWiperDamageMultiplier() * getLowHpPowerMultiplier();
+                            enemy.hp -= dmg;
+                            wiperHitTimers.set(enemy, WIPER_HIT_INTERVAL);
+                            createDamageText(ex, ey, Math.max(1, Math.round(dmg)), '#86efac', false);
+
+                            if (enemy.hp <= 0) {
+                                enemy.active = false;
+                                onEnemyKilled();
+                                score += (enemy.type === 3 ? 80 : (enemy.type === 2 ? 150 : (enemy.type === 1 ? 250 : 100)));
+                                createExplosion(ex, ey, enemy.color, 10);
+                            }
                         }
                     }
                 }
-            }
 
-            for (const eb of enemyBulletPool) {
-                if (!eb.active) continue;
+                for (const eb of enemyBulletPool) {
+                    if (!eb.active) continue;
 
-                if (
-                    eb.x + eb.radius >= barX - 6 &&
-                    eb.x - eb.radius <= barX + 6 &&
-                    eb.y + eb.radius >= topY &&
-                    eb.y - eb.radius <= bottomY
-                ) {
-                    eb.active = false;
+                    if (
+                        eb.x + eb.radius >= barX - 6 &&
+                        eb.x - eb.radius <= barX + 6 &&
+                        eb.y + eb.radius >= topY &&
+                        eb.y - eb.radius <= bottomY
+                    ) {
+                        eb.active = false;
+                    }
                 }
             }
 
@@ -3697,14 +4656,15 @@ function startGame() {
             tronTrail.push({
                 x: player.x + player.width * 0.5,
                 y: player.y + player.height * 0.5,
-                life: TRON_TRAIL_LIFE
+                life: getTronTrailLife(),
+                maxLife: getTronTrailLife()
             });
             for (let i = 0; i < tronTrail.length; i++) tronTrail[i].life--;
             while (tronTrail.length > 0 && tronTrail[0].life <= 0) tronTrail.shift();
 
             // 自機のすぐ近くは判定しない(出した直後に自分の壁で当たり続けるのを避ける意味はないが、
             // 描画と判定を揃えるため、すべての線分を対象にする)。
-            const tronDamage = () => Math.max(1, Math.round(shotPowerLevel * 0.6 * getLowHpPowerMultiplier()));
+            const tronDamage = () => Math.max(1, Math.round(shotPowerLevel * getTronDamageMultiplier() * getLowHpPowerMultiplier()));
             const touchesWall = (cx, cy, radius) => {
                 const r = radius + TRON_WALL_HALF_WIDTH;
                 const r2 = r * r;
@@ -3779,18 +4739,20 @@ function startGame() {
             } else {
                 const cx = player.x + player.width * 0.5;
                 const cy = player.y + 4;
-                for (let i = 0; i < LASER_BEAMS; i++) {
+                for (let i = 0; i < getLaserBeamCount(); i++) {
                     const angle = (Math.random() * 2 - 1) * LASER_SPREAD;
+                    const laserLife = getLaserLife();
                     laserBeams.push({
                         pts: buildLaserPath(cx, cy, angle),
-                        life: LASER_LIFE,
+                        life: laserLife,
+                        maxLife: laserLife,
                         hits: new Map()
                     });
                 }
                 weaponTimers.laser = weaponCooldown('laser');
             }
 
-            const laserDamage = () => Math.max(1, Math.round(shotPowerLevel * 0.8 * getLowHpPowerMultiplier()));
+            const laserDamage = () => Math.max(1, Math.round(shotPowerLevel * getLaserDamageMultiplier() * getLowHpPowerMultiplier()));
             const onBeam = (pts, cx, cy, radius) => {
                 const r = radius + LASER_HALF_WIDTH;
                 const r2 = r * r;
@@ -3890,8 +4852,8 @@ function startGame() {
 
                         const rollSniperDamage = () => {
                             const critChance = (critLevel * 0.05 + getCritChanceBonus()) * CRIT_RATE_MULT_SNIPER;
-                            const critRoll = rollCrit(critChance, CRIT_MULT_SNIPER);
-                            const damage = shotPowerLevel * SNIPER_DAMAGE_MULT * getLowHpPowerMultiplier() * critRoll.mult;
+                            const critRoll = rollCrit(critChance, getSniperCritMultiplier());
+                            const damage = shotPowerLevel * getSniperDamageMultiplier() * getLowHpPowerMultiplier() * critRoll.mult;
                             const color = critRoll.tiers >= 2 ? '#ff9900' : (critRoll.tiers > 0 ? '#ff0055' : '#fde047');
                             return { damage, color, isCrit: critRoll.tiers > 0 };
                         };
@@ -3954,7 +4916,7 @@ function startGame() {
         if (hasWeapon('machinegun')) {
             if (mgRest > 0) {
                 mgRest--;
-                if (mgRest === 0) mgBurst = MG_BURST_FRAMES;
+                if (mgRest === 0) mgBurst = getMachinegunBurstFrames();
             } else {
                 if (weaponTimers.machinegun > 0) {
                     weaponTimers.machinegun--;
@@ -3963,11 +4925,11 @@ function startGame() {
                         const a = (Math.random() * 2 - 1) * MG_SPREAD;
                         const sp = 10 + Math.random() * 2;
                         spawnFromPool(playerBulletPool, b => {
-                            b.spawn(sx, player.y + 8, Math.sin(a) * sp, -Math.cos(a) * sp, '#fde68a', 2, false, 0, 'normal', MG_LIFE, 4, 4, 1, 1);
+                            b.spawn(sx, player.y + 8, Math.sin(a) * sp, -Math.cos(a) * sp, '#fde68a', 3.5, false, 0, 'normal', MG_LIFE, 7, 7, 1, 1);
                             b.dmgMult = MG_DAMAGE_MULT;
                         });
                     }
-                    weaponTimers.machinegun = weaponCooldown('machinegun');
+                    weaponTimers.machinegun = getMachinegunShotCooldown();
                 }
                 mgBurst--;
                 if (mgBurst <= 0) {
@@ -4012,7 +4974,7 @@ function startGame() {
             }
         }
 
-        // HOMING: 左右交互に1発ずつ連射(計4発)。各弾は途中で3発に分裂する。
+        // HOMING: レベルに応じた数を左右交互に連射。Lv.3/5で各弾の分裂数が増える。
         if (hasWeapon('homing')) {
             if (homingBurstRemaining > 0) {
                 if (homingShotTimer > 0) {
@@ -4023,7 +4985,11 @@ function startGame() {
                     const side = homingSideToggle ? 1 : -1;
                     spawnFromPool(playerBulletPool, b => {
                         b.spawn(cx + side * 12, player.y, side * 1.6, -7.2, '#ffb347', 5, true, 32, 'homing', 120, 10, 10, 1, 1);
+                        const homingLevel = weaponLevels.homing || 1;
+                        b.dmgMult = WEAPON_DEFS.homing.baseDamageMultiplier + (homingLevel - 1) * 0.2;
                         b.splitWeapon = true;
+                        // Lv.3/5で分裂数+1（Lv.1-2:2発、Lv.3-4:3発、Lv.5:4発）
+                        b.homingSplitCount = 2 + Math.floor((homingLevel - 1) / 2);
                     });
                     homingBurstRemaining--;
                     homingShotTimer = HOMING_SHOT_INTERVAL;
@@ -4032,7 +4998,9 @@ function startGame() {
             } else if (weaponTimers.homing > 0) {
                 weaponTimers.homing--;
             } else {
-                homingBurstRemaining = HOMING_BURST_COUNT;
+                const homingLevel = weaponLevels.homing || 1;
+                // Lv.2/4で発射数+2（Lv.1:2発、Lv.2-3:4発、Lv.4-5:6発）
+                homingBurstRemaining = HOMING_BASE_BURST_COUNT + 2 * Math.floor(homingLevel / 2);
                 homingShotTimer = 0;
             }
         }
@@ -4103,7 +5071,10 @@ function startGame() {
             bossWarningTimer--;
             if (bossWarningTimer === 0) {
                 ui.bossWarning.classList.add('hidden');
-                boss = new Boss(bossLevel);
+                // ボスは3体が順番に登場: ステージ1,4,7…は通常ボス、2,5,8…はミサイル空母、3,6,9…はアームボス
+                const bossKind = bossLevel % 3;
+                boss = bossKind === 1 ? new MissileCarrier(bossLevel)
+                    : (bossKind === 2 ? new ArmBoss(bossLevel) : new Boss(bossLevel));
                 bossFightMs = 0;
             }
         }
@@ -4184,18 +5155,18 @@ function startGame() {
         // WIPER visual: 縦棒だけを左 -> 右へ移動
         if (gameState === STATE_PLAYING && hasWeapon('wiper')) {
             const cx = player.x + player.width * 0.5;
-            const cy = player.y + player.height * 0.5;
-            const barX = cx + wiperX;
 
             ctx.save();
             ctx.strokeStyle = 'rgba(134,239,172,0.9)';
             ctx.shadowColor = '#22c55e';
             ctx.shadowBlur = 8;
             ctx.lineWidth = 6;
-            ctx.beginPath();
-            ctx.moveTo(barX, player.y - WIPER_REACH);
-            ctx.lineTo(barX, player.y + 4);
-            ctx.stroke();
+            for (const offset of getWiperBarOffsets()) {
+                ctx.beginPath();
+                ctx.moveTo(cx + offset, player.y - getWiperReach());
+                ctx.lineTo(cx + offset, player.y + 4);
+                ctx.stroke();
+            }
             ctx.restore();
         }
 
@@ -4208,7 +5179,7 @@ function startGame() {
             for (let i = 1; i < tronTrail.length; i++) {
                 const a = tronTrail[i - 1];
                 const b = tronTrail[i];
-                const k = Math.max(0, Math.min(1, b.life / TRON_TRAIL_LIFE));
+                const k = Math.max(0, Math.min(1, b.life / (b.maxLife || TRON_TRAIL_BASE_LIFE)));
                 const fade = k < 0.25 ? k / 0.25 : 1;
                 ctx.strokeStyle = `rgba(103,232,249,${(0.25 + 0.65 * fade).toFixed(3)})`;
                 ctx.lineWidth = 3 + 7 * k;
@@ -4228,7 +5199,7 @@ function startGame() {
             ctx.shadowColor = '#f43f5e';
             ctx.shadowBlur = 12;
             for (const beam of laserBeams) {
-                const k = Math.max(0, Math.min(1, beam.life / LASER_LIFE));
+                const k = Math.max(0, Math.min(1, beam.life / (beam.maxLife || LASER_BASE_LIFE)));
                 ctx.beginPath();
                 ctx.moveTo(beam.pts[0].x, beam.pts[0].y);
                 for (let i = 1; i < beam.pts.length; i++) ctx.lineTo(beam.pts[i].x, beam.pts[i].y);
@@ -4320,7 +5291,7 @@ function startGame() {
         // MACHINEGUN ゲージ: 連射中は残り、クールダウン中は回復の進み具合
         if (gameState === STATE_PLAYING && hasWeapon('machinegun')) {
             const resting = mgRest > 0;
-            const k = resting ? 1 - mgRest / mgRestFrames() : mgBurst / MG_BURST_FRAMES;
+            const k = resting ? 1 - mgRest / mgRestFrames() : mgBurst / getMachinegunBurstFrames();
             ctx.save();
             ctx.fillStyle = 'rgba(15,23,42,0.7)';
             ctx.fillRect(8, GAME_HEIGHT - 30, 60, 5);
